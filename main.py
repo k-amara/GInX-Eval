@@ -108,7 +108,7 @@ def main(args, args_group):
 
     # Threshold the edge masks
     for t in [0.1, 0.3, 0.5, 0.7, 0.9]:
-        thresh_edge_masks = transform_edge_masks(edge_masks, strategy="remove", threshold=t)
+        thresh_edge_masks = transform_edge_masks(edge_masks, strategy=args.retrain_strategy, threshold=t)
         # Modify dataset with the edge masks
         new_dataset = []
         for i, data in enumerate(dataset):

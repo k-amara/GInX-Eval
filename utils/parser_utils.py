@@ -257,6 +257,13 @@ def arg_parse():
     )
 
     parser_explainer_params.add_argument(
+        "--retrain_strategy",
+        type=str,
+        help="strategy when retraining the model - remove or keep important edges",
+        default="remove",
+    )
+
+    parser_explainer_params.add_argument(
         "--mask_transformation",
         help="strategy for mask transformation",
         type=str,
