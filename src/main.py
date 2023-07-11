@@ -70,7 +70,7 @@ def main(args, args_group):
             "seed": args.seed,
         }
     model = get_gnnNets(args.num_node_features, args.num_classes, model_params)
-    model_save_name = f"{args.model_name}_{args.num_layers}l"
+    model_save_name = f"{args.model_name}_{args.num_layers}l_{args.seed}"
     if eval(args.graph_classification):
         trainer = TrainModel(
             model=model,
@@ -99,8 +99,8 @@ def main(args, args_group):
         )
     scores, preds = trainer.test()
     scores['threshold'] = 0
+    scores['seed'] = args.seed
     df_scores = pd.DataFrame(scores, index=[0])
-    print(df_scores)
     save_path = os.path.join(
         args.result_save_dir, args.dataset_name, args.explainer_name
     )
@@ -120,9 +120,9 @@ def main(args, args_group):
         for i, data in enumerate(dataset):
             assert data.idx == list_explained_data[i]
             data.edge_weight = thresh_edge_masks[i]
-            print("after data object weights: ", data.edge_weight)
             new_dataset.append(data)
 
+        model = get_gnnNets(args.num_node_features, args.num_classes, model_params)
         if eval(args.graph_classification):
             trainer = TrainModel(
                 model=model,
@@ -151,6 +151,7 @@ def main(args, args_group):
             )
         scores, preds = trainer.test()
         scores['threshold'] = t
+        scores['seed'] = args.seed
         df_scores = pd.DataFrame(scores, index=[0])
         print(df_scores)
         with open(scores_save_path, 'a') as f:

@@ -104,7 +104,6 @@ class TrainModel(object):
         self.model.load_state_dict(state_dict)
         self.model = self.model.to(self.device)
         self.model.eval()
-        print('self.graph_classification', self.graph_classification)
         if self.graph_classification:
             losses, preds, accs, balanced_accs, f1_scores = [], [], [], [], []
             for batch in self.loader["test"]:
@@ -137,7 +136,7 @@ class TrainModel(object):
             "test_balanced_acc": test_balanced_acc,
             "test_f1_score": test_f1_score,
         }
-        self.save_scores(scores)
+        # self.save_scores(scores)
         return scores, preds
 
     def train(self, train_params=None, optimizer_params=None):

@@ -62,12 +62,14 @@ def transform_edge_masks(edge_masks, strategy="remove", threshold=0.1):
     if strategy == "remove":
         thresh_edge_masks = []
         for edge_mask in edge_masks:
-            maskout = remove(edge_mask, threshold=threshold)
+            mask = edge_mask.copy()
+            maskout = remove(mask, threshold=threshold)
             thresh_edge_masks.append(maskout)
     elif strategy == "keep":
         thresh_edge_masks = []
         for edge_mask in edge_masks:
-            masked = keep(edge_mask, threshold=threshold)
+            mask = edge_mask.copy()
+            masked = keep(mask, threshold=threshold)
             thresh_edge_masks.append(masked)
     else:
         raise ValueError("Invalid strategy")

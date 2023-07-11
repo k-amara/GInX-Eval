@@ -1,13 +1,20 @@
 import numpy as np
 import torch
+import os
+import dill
+import random
+import time
 from captum.attr import IntegratedGradients, Saliency
 from torch_geometric.data import Data
 from torch_geometric.utils import to_networkx
 from gnn.model import GCNConv, GATConv, GINEConv, TransformerConv
+from gendata import get_dataloader
+from utils.io_utils import write_to_json
 
 from explainer.gnnexplainer import TargetedGNNExplainer
 from explainer.gradcam import GraphLayerGradCam
-
+from explainer.rcexplainer import RCExplainer_Batch, train_rcexplainer
+from explainer.explainer_utils.rcexplainer.rc_train import test_policy
 
 
 def sigmoid(x):
@@ -179,3 +186,47 @@ def explain_gradcam_graph(model, data, target, device, **kwargs):
     node_attr = np.array(node_attrs).mean(axis=0)
     edge_mask = sigmoid(node_attr_to_edge(data.edge_index, node_attr))
     return edge_mask.astype("float"), None
+
+
+def explain_rcexplainer_graph(model, data, target, device, **kwargs):
+    dataset_name = kwargs["dataset_name"]
+    seed = kwargs["seed"]
+    rcexplainer = RCExplainer_Batch(model, device, kwargs['num_classes'], hidden_size=kwargs['hidden_dim'])
+    subdir = os.path.join(kwargs["model_save_dir"], "rcexplainer")
+    os.makedirs(subdir, exist_ok=True)
+    rcexplainer_saving_path = os.path.join(subdir, f"rcexplainer_{dataset_name}_{str(device)}_{seed}.pickle")
+    if os.path.isfile(rcexplainer_saving_path):
+        print("Load saved RCExplainer model...")
+        rcexplainer_model = dill.load(open(rcexplainer_saving_path, "rb"))
+        rcexplainer_model = rcexplainer_model.to(device)
+    else:
+       # data loader
+        train_size = min(len(kwargs["dataset"]), 500)
+        explain_dataset_idx = random.sample(range(len(kwargs["dataset"])), k=train_size)
+        explain_dataset = kwargs["dataset"][explain_dataset_idx]
+        dataloader_params = {
+            "batch_size": kwargs["batch_size"],
+            "random_split_flag": kwargs["random_split_flag"],
+            "data_split_ratio": kwargs["data_split_ratio"],
+            "seed": kwargs["seed"],
+        }
+        loader, train_dataset, _, test_dataset = get_dataloader(explain_dataset, **dataloader_params)
+        t0 = time.time()
+        lr, weight_decay, topk_ratio = 0.01, 1e-5, 1.0
+        rcexplainer_model = train_rcexplainer(rcexplainer, train_dataset, test_dataset, loader, dataloader_params['batch_size'], lr, weight_decay, topk_ratio)
+        train_time = time.time() - t0
+        print("Save RCExplainer model...")
+        dill.dump(rcexplainer_model, file = open(rcexplainer_saving_path, "wb"))
+        train_time_file = os.path.join(subdir, f"rcexplainer_train_time.json")
+        entry = {"dataset": dataset_name, "train_time": train_time, "seed": seed, "device": str(device)}
+        write_to_json(entry, train_time_file)
+    
+    max_budget = data.num_edges
+    state = torch.zeros(max_budget, dtype=torch.bool)
+    data.batch = torch.zeros(data.num_nodes, dtype=torch.long)
+    edge_ranking = test_policy(rcexplainer_model, model, data, device)
+    edge_mask = 1 - edge_ranking/len(edge_ranking)
+    # edge_mask[i]: indicate the i-th edge to be added in the search process, i.e. that gives the highest reward.
+    return edge_mask, None
+ 
+    
