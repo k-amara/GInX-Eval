@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, GATConv, NNConv, GINEConv, TransformerConv
 from torch_geometric.data.batch import Batch
 from torch_geometric.nn.glob import global_mean_pool, global_add_pool, global_max_pool
-from code.utils.gen_utils import from_adj_to_edge_index_torch
+from src.utils.gen_utils import from_adj_to_edge_index_torch
 
 
 def get_gnnNets(input_dim, output_dim, model_params):

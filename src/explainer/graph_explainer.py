@@ -1,16 +1,17 @@
 import numpy as np
 import torch
-import random
 from captum.attr import IntegratedGradients, Saliency
 from torch_geometric.data import Data
 from torch_geometric.utils import to_networkx
-from code.utils.math_utils import sigmoid
 from gnn.model import GCNConv, GATConv, GINEConv, TransformerConv
 
 from explainer.gnnexplainer import TargetedGNNExplainer
 from explainer.gradcam import GraphLayerGradCam
 
 
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
 
 def get_all_convolution_layers(model):
     layers = []

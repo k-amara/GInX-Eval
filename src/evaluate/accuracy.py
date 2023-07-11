@@ -4,7 +4,7 @@
 
 import networkx as nx
 import numpy as np
-from evaluate.mask_utils import mask_to_shape
+from utils.mask_utils import mask_to_shape
 
 
 def get_explanation_syn(data, edge_mask, num_top_edges, top_acc):

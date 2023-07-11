@@ -45,7 +45,6 @@ class Explain(object):
         model,
         dataset,
         device,
-        list_test_idx,
         explainer_params,
         save_dir=None,
         save_name="mask",
@@ -66,8 +65,8 @@ class Explain(object):
         self.graph_classification = eval(explainer_params["graph_classification"])
         self.task = "_graph" if self.graph_classification else "_node"
 
-        self.list_test_idx = list_test_idx
         self.explainer_name = explainer_params["explainer_name"]
+        self.list_explained_data = []
 
         self.focus = explainer_params["focus"]
         self.mask_nature = explainer_params["mask_nature"]
@@ -145,7 +144,7 @@ class Explain(object):
 
     def _eval_acc(self, edge_masks):
         scores = []
-        num_list_explained_data_with_acc = 0
+        num_explained_data_with_acc = 0
         for i in range(len(self.list_explained_data)):
             edge_mask = torch.Tensor(edge_masks[i]).to(self.device)
             graph = (
@@ -164,7 +163,7 @@ class Explain(object):
                 )
                 recall, precision, f1_score = get_scores(G_expl, G_true)
                 balanced_acc, roc_auc_score = np.nan, np.nan
-                num_list_explained_data_with_acc += 1
+                num_explained_data_with_acc += 1
 
             elif self.dataset_name.startswith(
                 tuple(
@@ -208,7 +207,7 @@ class Explain(object):
                         balanced_acc = sklearn.metrics.balanced_accuracy_score(
                             true_explanation, pred_explanation
                         )
-                        num_list_explained_data_with_acc += 1
+                        num_explained_data_with_acc += 1
             else:
                 raise ValueError("Unknown dataset name: {}".format(self.dataset_name))
             entry = {
@@ -220,7 +219,7 @@ class Explain(object):
             }
             scores.append(entry)
         accuracy_scores = pd.DataFrame.from_dict(list_to_dict(scores))
-        accuracy_scores["num_list_explained_data_with_acc"] = num_list_explained_data_with_acc
+        accuracy_scores["num_explained_data_with_acc"] = num_explained_data_with_acc
         return accuracy_scores
 
     def _eval_fid(self, related_preds):
@@ -244,7 +243,7 @@ class Explain(object):
             raise ValueError("Unknown focus: {}".format(self.focus))
 
         fidelity_scores = pd.DataFrame.from_dict(fidelity_scores)
-        fidelity_scores["num_list_explained_data_fid"] = self.num_list_explained_data
+        fidelity_scores["num_explained_data_fid"] = self.num_explained_data
         return fidelity_scores
 
     def _eval_act(self, related_preds):
@@ -261,7 +260,7 @@ class Explain(object):
         else:
             raise ValueError("Unknown focus: {}".format(self.focus))
         accountability_scores = pd.DataFrame.from_dict(accountability_scores)
-        accountability_scores["num_list_explained_data_act"] = self.num_list_explained_data
+        accountability_scores["num_explained_data_act"] = self.num_explained_data
         return accountability_scores
 
     def eval(self, edge_masks, node_feat_masks):
@@ -430,6 +429,7 @@ class Explain(object):
                     node_feat_masks.append(node_feat_mask)
                     computation_time.append(duration_seconds)
                     list_explained_data.append(data.idx)
+                self.list_explained_data = list_explained_data
             if (self.save_dir is not None) and self.save:
                 self.save_mask(
                     list_explained_data, edge_masks, node_feat_masks, computation_time
@@ -464,21 +464,20 @@ class Explain(object):
         return list_explained_data, edge_masks, node_feat_masks, computation_time
 
 
-def get_mask_dir_path(args, device):
-    mask_save_name = "mask_{}_{}_{}_{}_{}_{}.pkl".format(
+def get_mask_dir_path(args):
+    mask_save_name = "mask_{}_{}_{}_{}_{}.pkl".format(
         args.dataset_name,
         args.model_name,
         args.explainer_name,
         args.focus,
-        str(device),
         args.seed,
     )
     return mask_save_name
 
 
-def explain_main(dataset, model, device, args, unseen=False):
+def explain_main(dataset, model, device, args):
     args.dataset = dataset
-    mask_save_name = get_mask_dir_path(args, device, unseen)
+    mask_save_name = get_mask_dir_path(args)
     explainer = Explain(
         model=model,
         dataset=dataset,
@@ -495,6 +494,7 @@ def explain_main(dataset, model, device, args, unseen=False):
         node_feat_masks,
         computation_time,
     ) = explainer.compute_mask()
+    print('list explained data : ', list_explained_data)
     edge_masks, node_feat_masks = explainer.clean_mask(edge_masks, node_feat_masks)
     return list_explained_data, edge_masks, node_feat_masks, computation_time
 

@@ -419,3 +419,9 @@ def get_cf_edge_mask(new_edge_index, edge_index):
     return(edge_mask)
 
 
+def node_attr_to_edge(edge_index, node_mask):
+    edge_mask = np.zeros(edge_index.shape[1])
+    edge_mask += node_mask[edge_index[0].cpu().numpy()]
+    edge_mask += node_mask[edge_index[1].cpu().numpy()]
+    return edge_mask
+

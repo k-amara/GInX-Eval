@@ -326,7 +326,7 @@ def arg_parse():
         dropout=0,
         readout="identity",
         weight_decay=5e-4,
-        model_name="gcn",
+        model_name="gin",
         edge_ent=1.0,
         edge_size=0.005,
         explainer_name="gnnexplainer",

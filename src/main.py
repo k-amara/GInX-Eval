@@ -70,8 +70,7 @@ def main(args, args_group):
             "seed": args.seed,
         }
     model = get_gnnNets(args.num_node_features, args.num_classes, model_params)
-    model_save_name = f"{args.model_name}_{args.num_layers}l_{str(device)}"
-    scores_save_path = os.path.join(trainer.save_dir, f"{model_save_name}_scores.csv")
+    model_save_name = f"{args.model_name}_{args.num_layers}l"
     if eval(args.graph_classification):
         trainer = TrainModel(
             model=model,
@@ -100,8 +99,15 @@ def main(args, args_group):
         )
     scores, preds = trainer.test()
     scores['threshold'] = 0
+    df_scores = pd.DataFrame(scores, index=[0])
+    print(df_scores)
+    save_path = os.path.join(
+        args.result_save_dir, args.dataset_name, args.explainer_name
+    )
+    os.makedirs(save_path, exist_ok=True)
+    scores_save_path = os.path.join(save_path, f"{model_save_name}_scores.csv")
     with open(scores_save_path, 'a') as f:
-        pd.DataFrame(scores).to_csv(f, header=f.tell()==0)
+        df_scores.to_csv(f, header=f.tell()==0)
     
     list_explained_data, edge_masks, node_feat_masks, computation_time = explain_main(dataset, trainer.model, device, args)
 
@@ -112,7 +118,6 @@ def main(args, args_group):
         # Modify dataset with the edge masks
         new_dataset = []
         for i, data in enumerate(dataset):
-            print("initial data object weights: ", data.edge_weight)
             assert data.idx == list_explained_data[i]
             data.edge_weight = thresh_edge_masks[i]
             print("after data object weights: ", data.edge_weight)
@@ -124,8 +129,8 @@ def main(args, args_group):
                 dataset=dataset,
                 device=device,
                 graph_classification=eval(args.graph_classification),
-                save_dir=os.path.join(args.model_save_dir, args.dataset_name),
-                save_name=model_save_name + "_thresh_{t}",
+                save_dir=os.path.join(args.model_save_dir, args.dataset_name, args.explainer_name),
+                save_name=model_save_name + f"_{args.explainer_name}_thresh_{t}",
                 dataloader_params=dataloader_params,
             )
         else:
@@ -134,8 +139,8 @@ def main(args, args_group):
                 dataset=dataset,
                 device=device,
                 graph_classification=eval(args.graph_classification),
-                save_dir=os.path.join(args.model_save_dir, args.dataset_name),
-                save_name=model_save_name + "_thresh_{t}",
+                save_dir=os.path.join(args.model_save_dir, args.dataset_name, args.explainer_name),
+                save_name=model_save_name + f"_{args.explainer_name}_thresh_{t}",
             )
         if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
             trainer.load_model()
@@ -146,8 +151,10 @@ def main(args, args_group):
             )
         scores, preds = trainer.test()
         scores['threshold'] = t
+        df_scores = pd.DataFrame(scores, index=[0])
+        print(df_scores)
         with open(scores_save_path, 'a') as f:
-            pd.DataFrame(scores).to_csv(f, header=f.tell()==0)
+            df_scores.to_csv(f, header=f.tell()==0)
 
 
 
