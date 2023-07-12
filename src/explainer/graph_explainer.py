@@ -230,3 +230,17 @@ def explain_rcexplainer_graph(model, data, target, device, **kwargs):
     return edge_mask, None
  
     
+
+##### Groundtruth Explanations #####
+
+def explain_truth_graph(model, data, target, device, **kwargs):
+    if not eval(kwargs["groundtruth"]):
+        return None, None
+    else: 
+        return data.edge_mask.cpu().detach().numpy(), None
+    
+def explain_inverse_graph(model, data, target, device, **kwargs):
+    if not eval(kwargs["groundtruth"]):
+        return None, None
+    else: 
+        return (1-data.edge_mask).cpu().detach().numpy(), None

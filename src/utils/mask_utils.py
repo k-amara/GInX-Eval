@@ -63,13 +63,13 @@ def transform_edge_masks(edge_masks, strategy="remove", threshold=0.1):
         thresh_edge_masks = []
         for edge_mask in edge_masks:
             mask = edge_mask.copy()
-            maskout = remove(mask, threshold=threshold)
+            maskout = remove_hard(mask, threshold=threshold)
             thresh_edge_masks.append(maskout)
     elif strategy == "keep":
         thresh_edge_masks = []
         for edge_mask in edge_masks:
             mask = edge_mask.copy()
-            masked = keep(mask, threshold=threshold)
+            masked = keep_hard(mask, threshold=threshold)
             thresh_edge_masks.append(masked)
     else:
         raise ValueError("Invalid strategy")
@@ -83,6 +83,13 @@ def keep(mask, threshold=0.1):
     mask[unimportant_indices] = 0
     return mask
 
+def keep_hard(mask, threshold=0.1):
+    new_mask = np.ones_like(mask)
+    mask_len = len(mask)
+    split_point = int(threshold * mask_len)
+    unimportant_indices = (-mask).argsort()[split_point:]
+    new_mask[unimportant_indices] = 0
+    return new_mask
 
 def remove(mask, threshold=0.1):
     mask_len = len(mask)
@@ -90,3 +97,12 @@ def remove(mask, threshold=0.1):
     important_indices = (-mask).argsort()[:split_point]
     mask[important_indices] = 0
     return mask
+
+def remove_hard(mask, threshold=0.1):
+    new_mask = np.ones_like(mask)
+    mask_len = len(mask)
+    split_point = int(threshold * mask_len)
+    important_indices = (-mask).argsort()[:split_point]
+    new_mask[important_indices] = 0
+    return new_mask
+

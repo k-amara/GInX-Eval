@@ -61,6 +61,8 @@ def main(args, args_group):
     else:
         args.max_num_nodes = dataset.data.num_nodes
 
+
+    ###### Train Model ######
     if eval(args.graph_classification):
         args.data_split_ratio = [args.train_ratio, args.val_ratio, args.test_ratio]
         dataloader_params = {
@@ -108,17 +110,19 @@ def main(args, args_group):
     scores_save_path = os.path.join(save_path, f"{model_save_name}_scores.csv")
     with open(scores_save_path, 'a') as f:
         df_scores.to_csv(f, header=f.tell()==0)
-    
+
+
+
+    ###### Generate Explanations ######
     list_explained_data, edge_masks, node_feat_masks, computation_time = explain_main(dataset, trainer.model, device, args)
 
-
-    # Threshold the edge masks
+    ###### Retrain with Graph degradtaion ######
     for t in [0.1, 0.3, 0.5, 0.7, 0.9]:
         thresh_edge_masks = transform_edge_masks(edge_masks, strategy=args.retrain_strategy, threshold=t)
         # Modify dataset with the edge masks
         new_dataset = []
         for i, data in enumerate(dataset):
-            assert data.idx == list_explained_data[i]
+            assert data.idx.detach().cpu().item() == list_explained_data[i]
             data.edge_weight = thresh_edge_masks[i]
             new_dataset.append(data)
 

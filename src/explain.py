@@ -494,7 +494,6 @@ def explain_main(dataset, model, device, args):
         node_feat_masks,
         computation_time,
     ) = explainer.compute_mask()
-    print('list explained data : ', list_explained_data)
     edge_masks, node_feat_masks = explainer.clean_mask(edge_masks, node_feat_masks)
     return list_explained_data, edge_masks, node_feat_masks, computation_time
 
