@@ -5,6 +5,7 @@ from torch_geometric.data import DataLoader
 from dataset import (
     MoleculeDataset,
     SynGraphDataset,
+    NCRealGraphDataset,
     Benzene,
     Mutag,
 )
@@ -21,6 +22,12 @@ def get_dataset(dataset_root, **kwargs):
         return Mutag(root=dataset_root, name=dataset_name)
     elif dataset_name.lower() == "benzene":
         return Benzene(root=dataset_root, name=dataset_name)
+    elif dataset_name.lower() in list(NCRealGraphDataset.names.keys()):
+        dataset = NCRealGraphDataset(
+            root=dataset_root, name=dataset_name, dataset_params=kwargs
+        )
+        dataset.process()
+        return dataset
     elif dataset_name.lower() in list(SynGraphDataset.names.keys()):
         dataset = SynGraphDataset(
             root=dataset_root,

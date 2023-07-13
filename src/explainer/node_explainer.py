@@ -344,6 +344,7 @@ def explain_truth_node(model, data, target, device, **kwargs):
         G_true, role, true_edge_mask = get_ground_truth_syn(
             kwargs["explained_idx"], data, kwargs["dataset_name"]
         )
+        print('true_edge_mask', true_edge_mask)
         return true_edge_mask.astype("float"), None
     
 def explain_inverse_node(model, data, target, device, **kwargs):
