@@ -35,15 +35,6 @@ def main(args, args_group):
     args = get_data_args(dataset, args)
     model_params["edge_dim"] = args.edge_dim
 
-    data_y = dataset.data.y.cpu().numpy()
-    if args.num_classes == 2:
-        y_cf_all = 1 - data_y
-    else:
-        y_cf_all = []
-        for y in data_y:
-            y_cf_all.append(y + 1 if y < args.num_classes - 1 else 0)
-    args.y_cf_all = torch.FloatTensor(y_cf_all).to(device)
-
     # Statistics of the dataset
     # Number of graphs, number of node features, number of edge features, average number of nodes, average number of edges
     info = {
@@ -126,7 +117,7 @@ def main(args, args_group):
     list_explained_data, edge_masks, node_feat_masks, computation_time = explain_main(dataset, trainer.model, device, args)
 
     ###### Retrain with Graph degradtaion ######
-    for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+    for t in [0.1, 0.3, 0.5, 0.7, 0.9]:
         thresh_edge_masks = transform_edge_masks(edge_masks, strategy=args.retrain_strategy, threshold=t)
         # Modify dataset with the edge masks
         new_dataset = []
@@ -135,26 +126,6 @@ def main(args, args_group):
             data.edge_weight = thresh_edge_masks[i]
             new_dataset.append(data)
 
-        model = get_gnnNets(args.num_node_features, args.num_classes, model_params)
-        if eval(args.graph_classification):
-            trainer = TrainModel(
-                model=model,
-                dataset=dataset,
-                device=device,
-                graph_classification=eval(args.graph_classification),
-                save_dir=os.path.join(args.model_save_dir, args.dataset_name, args.explainer_name),
-                save_name=model_save_name + f"_{args.explainer_name}_thresh_{t}",
-                dataloader_params=dataloader_params,
-            )
-        else:
-            trainer = TrainModel(
-                model=model,
-                dataset=dataset,
-                device=device,
-                graph_classification=eval(args.graph_classification),
-                save_dir=os.path.join(args.model_save_dir, args.dataset_name, args.explainer_name),
-                save_name=model_save_name + f"_{args.explainer_name}_thresh_{t}",
-            )
         if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
             trainer.load_model()
         else:

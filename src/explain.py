@@ -8,21 +8,12 @@ import pandas as pd
 from evaluate.fidelity import (
     fidelity_acc,
     fidelity_acc_inv,
-    fidelity_acc_inv_ext,
     fidelity_gnn_acc,
     fidelity_gnn_acc_inv,
-    fidelity_gnn_acc_inv_ext,
     fidelity_gnn_prob,
     fidelity_gnn_prob_inv,
     fidelity_prob,
     fidelity_prob_inv,
-)
-from evaluate.accountability import (
-    accountability,
-    accountability_gnn,
-    accountability_ext,
-    accountability_gnn_ext,
-    extend_mask,
 )
 from utils.io_utils import check_dir
 from utils.gen_utils import list_to_dict
@@ -59,7 +50,6 @@ class Explain(object):
         self.save_name = save_name
         if self.save_dir is not None:
             check_dir(self.save_dir)
-        self.mu = explainer_params["mu"]
 
         self.explainer_params = explainer_params
         self.graph_classification = eval(explainer_params["graph_classification"])
@@ -85,7 +75,18 @@ class Explain(object):
                 if self.graph_classification
                 else self.dataset.data
             )
-            if self.dataset_name.startswith(
+            if (self.dataset_name.startswith(tuple(["ba", "tree"]))) & (
+                not self.graph_classification
+            ):
+                G_true, role, true_edge_mask = get_ground_truth_syn(
+                    self.list_explained_data[i], self.data, self.dataset_name
+                )
+                G_expl = get_explanation_syn(
+                    graph, edge_mask, num_top_edges=self.num_top_edges, top_acc=True
+                )
+                top_recall, top_precision, top_f1_score = get_scores(G_expl, G_true)
+                top_balanced_acc, top_roc_auc_score = np.nan, np.nan
+            elif self.dataset_name.startswith(
                 tuple(
                     [
                         "ba_2motifs",
@@ -227,7 +228,6 @@ class Explain(object):
             fidelity_scores = {
                 "fidelity_acc+": fidelity_acc(related_preds),
                 "fidelity_acc-": fidelity_acc_inv(related_preds),
-                "fidelity_acc-_ext": fidelity_acc_inv_ext(related_preds),
                 "fidelity_prob+": fidelity_prob(related_preds),
                 "fidelity_prob-": fidelity_prob_inv(related_preds),
             }
@@ -235,7 +235,6 @@ class Explain(object):
             fidelity_scores = {
                 "fidelity_gnn_acc+": fidelity_gnn_acc(related_preds),
                 "fidelity_gnn_acc-": fidelity_gnn_acc_inv(related_preds),
-                "fidelity_gnn_acc-_ext": fidelity_gnn_acc_inv_ext(related_preds),
                 "fidelity_gnn_prob+": fidelity_gnn_prob(related_preds),
                 "fidelity_gnn_prob-": fidelity_gnn_prob_inv(related_preds),
             }
@@ -246,22 +245,6 @@ class Explain(object):
         fidelity_scores["num_explained_data_fid"] = self.num_explained_data
         return fidelity_scores
 
-    def _eval_act(self, related_preds):
-        if self.focus == "phenomenon":
-            accountability_scores = {
-                "accountability": accountability(related_preds),
-                "accountability_ext": accountability_ext(related_preds),
-            }
-        elif self.focus == "model":
-            accountability_scores = {
-                "accountability_gnn": accountability_gnn(related_preds),
-                "accountability_gnn_ext": accountability_gnn_ext(related_preds),
-            }
-        else:
-            raise ValueError("Unknown focus: {}".format(self.focus))
-        accountability_scores = pd.DataFrame.from_dict(accountability_scores)
-        accountability_scores["num_explained_data_act"] = self.num_explained_data
-        return accountability_scores
 
     def eval(self, edge_masks, node_feat_masks):
         related_preds = eval("self.related_pred" + self.task)(
@@ -273,12 +256,10 @@ class Explain(object):
         else:
             accuracy_scores, top_accuracy_scores = {}, {}
         fidelity_scores = self._eval_fid(related_preds)
-        accountability_scores = self._eval_act(related_preds)
         return (
             top_accuracy_scores,
             accuracy_scores,
             fidelity_scores,
-            accountability_scores,
         )
 
     def related_pred_graph(self, edge_masks, node_feat_masks):
@@ -301,15 +282,13 @@ class Explain(object):
             else:
                 x_masked, x_maskout = data.x, data.x
 
-            masked_data, maskout_data, masked_ext_data = (
-                data.clone(),
+            masked_data, maskout_data = (
                 data.clone(),
                 data.clone(),
             )
-            masked_data.x, maskout_data.x, masked_ext_data.x = (
+            masked_data.x, maskout_data.x = (
                 x_masked,
                 x_maskout,
-                x_masked,
             )
 
             if (
@@ -334,28 +313,16 @@ class Explain(object):
                     maskout_data.edge_attr = data.edge_attr[edge_mask <= 0].to(
                         self.device
                     )
-                    # Extended explanation: all edges (with edge attributions); important edges have weight 1; smaller weights on the unimportant edges
-                    ext_edge_mask = extend_mask(hard_edge_mask, mu=self.mu)
-                    masked_ext_data.edge_weight = ext_edge_mask
                 elif self.mask_nature == "hard_full":
                     masked_data.edge_weight = hard_edge_mask
                     maskout_data.edge_weight = 1 - hard_edge_mask
-                    # Extended explanation: same as "hard"
-                    ext_edge_mask = extend_mask(hard_edge_mask, mu=self.mu)
-                    masked_ext_data.edge_weight = ext_edge_mask
                 elif self.mask_nature == "soft":
                     masked_data.edge_weight = edge_mask
                     maskout_data.edge_weight = 1 - edge_mask
-                    # Extended explanation: add small weights tyo unimportant edges
-                    ext_edge_mask = extend_mask(edge_mask, mu=self.mu)
-                    masked_ext_data.edge_weight = ext_edge_mask
                 else:
                     raise ValueError("Unknown mask nature: {}".format(self.mask_nature))
 
             masked_prob_idx = self.model.get_prob(masked_data).cpu().detach().numpy()[0]
-            masked_ext_prob_idx = (
-                self.model.get_prob(masked_ext_data).cpu().detach().numpy()[0]
-            )
             maskout_prob_idx = (
                 self.model.get_prob(maskout_data).cpu().detach().numpy()[0]
             )
@@ -369,7 +336,6 @@ class Explain(object):
                     "explained_y_idx": self.list_explained_data[i],
                     "masked": masked_prob_idx,
                     "maskout": maskout_prob_idx,
-                    "masked_extended": masked_ext_prob_idx,
                     "origin": ori_prob_idx,
                     "true_label": true_label,
                     "pred_label": pred_label,
@@ -378,6 +344,90 @@ class Explain(object):
 
         related_preds = list_to_dict(related_preds)
         return related_preds
+    
+    def related_pred_node(self, edge_masks, node_feat_masks):
+        related_preds = []
+        data = self.data
+        ori_probs = self.model.get_prob(data=self.data)
+        for i in range(len(self.list_explained_data)):
+            if node_feat_masks[0] is not None:
+                if node_feat_masks[i].ndim == 0:
+                    # if type of node feat mask is 'feature'
+                    node_feat_mask = node_feat_masks[i].reshape(-1)
+                else:
+                    # if type of node feat mask is 'feature'
+                    node_feat_mask = node_feat_masks[i]
+                node_feat_mask = torch.Tensor(node_feat_mask).to(self.device)
+                x_masked = self.data.x * node_feat_mask
+                x_maskout = self.data.x * (1 - node_feat_mask)
+            else:
+                x_masked, x_maskout = self.data.x, self.data.x
+
+            masked_data, maskout_data = (
+                data.clone(),
+                data.clone(),
+            )
+            masked_data.x, maskout_data.x.x = (
+                x_masked,
+                x_maskout,
+            )
+
+            if (
+                (edge_masks[i] is not None)
+                and (hasattr(edge_masks[i], "__len__"))
+                and (len(edge_masks[i]) > 0)
+            ):
+                edge_mask = torch.Tensor(edge_masks[i]).to(self.device)
+                hard_edge_mask = (
+                    torch.where(edge_mask > 0, 1, 0).to(self.device).float()
+                )
+                if self.mask_nature == "hard":
+                    masked_data.edge_index = data.edge_index[:, edge_mask > 0].to(
+                        self.device
+                    )
+                    masked_data.edge_attr = data.edge_attr[edge_mask > 0].to(
+                        self.device
+                    )
+                    maskout_data.edge_index = data.edge_index[:, edge_mask <= 0].to(
+                        self.device
+                    )
+                    maskout_data.edge_attr = data.edge_attr[edge_mask <= 0].to(
+                        self.device
+                    )
+                elif self.mask_nature == "hard_full":
+                    masked_data.edge_weight = hard_edge_mask
+                    maskout_data.edge_weight = 1 - hard_edge_mask
+                elif self.mask_nature == "soft":
+                    masked_data.edge_weight = edge_mask
+                    maskout_data.edge_weight = 1 - edge_mask
+                else:
+                    raise ValueError("Unknown mask nature: {}".format(self.mask_nature))
+
+            masked_probs = self.model.get_prob(masked_data).cpu().detach().numpy()[0]
+            maskout_probs = self.model.get_prob(maskout_data).cpu().detach().numpy()[0]
+
+            explained_y_idx = self.list_explained_data[i]
+            ori_prob_idx = ori_probs[explained_y_idx].cpu().detach().numpy()
+            masked_prob_idx = masked_probs[explained_y_idx].cpu().detach().numpy()
+            maskout_prob_idx = maskout_probs[explained_y_idx].cpu().detach().numpy()
+            true_label = self.data.y[explained_y_idx].cpu().item()
+            pred_label = np.argmax(ori_prob_idx)
+
+            # assert true_label == pred_label, "The label predicted by the GCN does not match the true label."\
+            related_preds.append(
+                {
+                    "explained_y_idx": explained_y_idx,
+                    "masked": masked_prob_idx,
+                    "maskout": maskout_prob_idx,
+                    "origin": ori_prob_idx,
+                    "true_label": true_label,
+                    "pred_label": pred_label,
+                }
+            )
+
+        related_preds = list_to_dict(related_preds)
+        return related_preds
+
 
     def _compute_graph(self, i):
         data = self.dataset[i].to(self.device)
@@ -388,6 +438,33 @@ class Explain(object):
         start_time = time.time()
         edge_mask, node_feat_mask = self.explain_function(
             self.model, data, target, self.device, **self.explainer_params
+        )
+        end_time = time.time()
+        duration_seconds = end_time - start_time
+        return (
+            edge_mask,
+            node_feat_mask,
+            duration_seconds,
+        )
+    
+    def _compute_node(self, i):
+        if self.focus == "phenomenon":
+            targets = self.data.y
+        else:
+            self.model.eval()
+            data = self.data.to(self.device)
+            out = self.model(data=data)
+            targets = torch.LongTensor(out.argmax(dim=1).detach().cpu().numpy()).to(
+                self.device
+            )
+        start_time = time.time()
+        edge_mask, node_feat_mask = self.explain_function(
+            self.model,
+            self.data,
+            i,
+            targets[i],
+            self.device,
+            **self.explainer_params,
         )
         end_time = time.time()
         duration_seconds = end_time - start_time

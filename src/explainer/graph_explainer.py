@@ -15,6 +15,8 @@ from explainer.gnnexplainer import TargetedGNNExplainer
 from explainer.gradcam import GraphLayerGradCam
 from explainer.rcexplainer import RCExplainer_Batch, train_rcexplainer
 from explainer.explainer_utils.rcexplainer.rc_train import test_policy
+from explainer.graphcfe import GraphCFE, train, test, baseline_cf, add_list_in_dict, compute_counterfactual
+
 
 
 def sigmoid(x):
@@ -230,6 +232,87 @@ def explain_rcexplainer_graph(model, data, target, device, **kwargs):
     return edge_mask, None
  
     
+
+def explain_graphcfe_graph(model, data, target, device, **kwargs):
+    dataset_name = kwargs["dataset_name"]
+    y_cf_all = kwargs['y_cf_all']
+    seed = kwargs["seed"]
+
+    # data loader
+    train_size = min(len(kwargs["dataset"]), 500)
+    explain_dataset_idx = random.sample(range(len(kwargs["dataset"])), k=train_size)
+    explain_dataset = kwargs["dataset"][explain_dataset_idx]
+    dataloader_params = {
+        "batch_size": kwargs["batch_size"],
+        "random_split_flag": kwargs["random_split_flag"],
+        "data_split_ratio": kwargs["data_split_ratio"],
+        "seed": kwargs["seed"],
+    }
+    loader, _, _, _ = get_dataloader(explain_dataset, **dataloader_params)
+    
+    # metrics
+    metrics = ['validity', 'proximity_x', 'proximity_a']
+
+    subdir = os.path.join(kwargs["model_save_dir"], "graphcfe")
+    os.makedirs(subdir, exist_ok=True)
+    graphcfe_saving_path = os.path.join(subdir, f"graphcfe_{dataset_name}_{str(device)}_{seed}.pth")
+     # model
+    init_params = {'hidden_dim': kwargs["hidden_dim"], 'dropout': kwargs["dropout"], 'num_node_features': kwargs["num_node_features"], 'max_num_nodes': kwargs["max_num_nodes"]}
+    graphcfe_model = GraphCFE(init_params=init_params, device=device)
+
+    if os.path.isfile(graphcfe_saving_path):
+        print("Load saved GraphCFE model...")
+        state_dict = torch.load(graphcfe_saving_path)
+        graphcfe_model.load_state_dict(state_dict)
+        graphcfe_model = graphcfe_model.to(device)
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
+        graphcfe_model = graphcfe_model.to(device)
+        train_params = {'epochs': 4000, 'model': graphcfe_model, 'pred_model': model, 'optimizer': optimizer,
+                        'y_cf': y_cf_all,
+                        'train_loader': loader['train'], 'val_loader': loader['eval'], 'test_loader': loader['test'],
+                        'dataset': dataset_name, 'metrics': metrics, 'save_model': False}
+        t0 = time.time()
+        train(train_params)
+        train_time = time.time() - t0
+        print("Save GraphCFE model...")
+        torch.save(graphcfe_model.state_dict(), graphcfe_saving_path)
+        train_time_file = os.path.join(subdir, f"graphcfe_train_time.json")
+        entry = {"dataset": dataset_name, "train_time": train_time, "seed": seed, "device": str(device)}
+        write_to_json(entry, train_time_file)
+    # test
+    test_params = {'model': graphcfe_model, 'dataset': dataset_name, 'data_loader': loader['test'], 'pred_model': model,
+                       'metrics': metrics, 'y_cf': y_cf_all}
+    eval_results = test(test_params)
+    results_all_exp = {}
+    for k in metrics:
+        results_all_exp = add_list_in_dict(k, results_all_exp, eval_results[k].detach().cpu().numpy())
+    for k in eval_results:
+        if isinstance(eval_results[k], list):
+            print(k, ": ", eval_results[k])
+        else:
+            print(k, f": {eval_results[k]:.4f}")
+
+    # baseline
+    # num_rounds, type = 10, "random"
+    # eval_results = baseline_cf(dataset_name, data, metrics, y_cf, model, device, num_rounds=num_rounds, type=type)
+    
+    if hasattr(data, 'y_cf'):
+        y_cf = data.y_cf
+    else:
+        y_cf = 1 - data.y
+    eval_results, edge_mask = compute_counterfactual(dataset_name, data, metrics, y_cf, graphcfe_model, model, device)
+    results_all_exp = {}
+    for k in metrics:
+        results_all_exp = add_list_in_dict(k, results_all_exp, eval_results[k].detach().cpu().numpy())
+    for k in eval_results:
+        if isinstance(eval_results[k], list):
+            print(k, ": ", eval_results[k])
+        else:
+            print(k, f": {eval_results[k]:.4f}")
+    return edge_mask, None
+
+
 
 ##### Groundtruth Explanations #####
 
