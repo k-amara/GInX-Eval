@@ -4,6 +4,7 @@ import os
 import dill
 import random
 import time
+from copy import deepcopy
 from captum.attr import IntegratedGradients, Saliency
 from torch_geometric.data import Data
 from torch_geometric.utils import to_networkx
@@ -16,8 +17,9 @@ from explainer.gradcam import GraphLayerGradCam
 from explainer.rcexplainer import RCExplainer_Batch, train_rcexplainer
 from explainer.explainer_utils.rcexplainer.rc_train import test_policy
 from explainer.graphcfe import GraphCFE, train, test, baseline_cf, add_list_in_dict, compute_counterfactual
-
-
+from explainer.gsat import GSAT, ExtractorMLP, gsat_get_config
+from explainer.explainer_utils.gsat import Writer, init_metric_dict, save_checkpoint, load_checkpoint
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
@@ -327,3 +329,72 @@ def explain_inverse_graph(model, data, target, device, **kwargs):
         return None, None
     else: 
         return (1-data.edge_mask).cpu().detach().numpy(), None
+    
+
+
+def explain_gsat_graph(model, data, target, device, **kwargs):
+    dataset_name = kwargs["dataset_name"]
+    seed = kwargs["seed"]
+    num_class = kwargs["num_classes"]
+
+    subdir = os.path.join(kwargs["model_save_dir"], "gsat")
+    os.makedirs(subdir, exist_ok=True)
+    gsat_saving_path = os.path.join(subdir, f"gsat_{dataset_name}_{str(device)}_{seed}.pt")
+
+    # config gsat training
+    shared_config, method_config = gsat_get_config()
+    if dataset_name == 'mnist':
+        multi_label = True
+    else:
+        multi_label = False
+    extractor = ExtractorMLP(kwargs['hidden_dim'], shared_config).to(device)
+    lr, wd = method_config['lr'], method_config.get('weight_decay', 0)
+    optimizer = torch.optim.Adam(list(extractor.parameters()) + list(model.parameters()), lr=lr, weight_decay=wd)
+    scheduler_config = method_config.get('scheduler', {})
+    scheduler = None if scheduler_config == {} else ReduceLROnPlateau(optimizer, mode='max', **scheduler_config)
+
+    # writer = Writer(log_dir=subdir)
+    # hparam_dict = {"dataset": dataset_name, "seed": seed, "device": str(device), "model": kwargs['model_name']}
+    metric_dict = deepcopy(init_metric_dict)
+    # writer.add_hparams(hparam_dict=hparam_dict, metric_dict=metric_dict)
+
+    # data loader
+    train_size = min(len(kwargs["dataset"]), 500)
+    explain_dataset_idx = random.sample(range(len(kwargs["dataset"])), k=train_size)
+    explain_dataset = kwargs["dataset"][explain_dataset_idx]
+    dataloader_params = {
+        "batch_size": kwargs["batch_size"],
+        "random_split_flag": kwargs["random_split_flag"],
+        "data_split_ratio": kwargs["data_split_ratio"],
+        "seed": kwargs["seed"],
+    }
+    loader, train_dataset, _, test_dataset = get_dataloader(explain_dataset, **dataloader_params)
+
+
+    if os.path.isfile(gsat_saving_path):
+        print("Load saved GSAT model...")
+        load_checkpoint(extractor, subdir, model_name=f'gsat_{dataset_name}_{str(device)}_{seed}')
+        extractor = extractor.to(device)
+        gsat = GSAT(model, extractor, optimizer, scheduler, device, subdir, dataset_name, num_class, multi_label, seed, method_config, shared_config)
+
+    else:
+        print('====================================')
+        print('[INFO] Training GSAT...')
+        gsat = GSAT(model, extractor, optimizer, scheduler, device, subdir, dataset_name, num_class, multi_label, seed, method_config, shared_config)
+        t0 = time.time()
+        metric_dict = gsat.train(loader, test_dataset, metric_dict, use_edge_attr=True)
+        train_time = time.time() - t0
+        # writer.add_hparams(hparam_dict=hparam_dict, metric_dict=metric_dict)
+        save_checkpoint(gsat.extractor, subdir, model_name=f'gsat_{dataset_name}_{str(device)}_{seed}')
+        
+        train_time_file = os.path.join(subdir, f"gsat_train_time.json")
+        entry = {"dataset": dataset_name, "train_time": train_time, "seed": seed, "device": str(device)}
+        write_to_json(entry, train_time_file)
+        
+
+    data.batch = torch.zeros(data.num_nodes, dtype=torch.long)
+    gsat.extractor = gsat.extractor.to(device)
+    data = data.to(device)
+    edge_att, loss_dict, clf_logits = gsat.eval_one_batch(data, epoch=method_config['epochs'])
+    edge_mask = edge_att # attention scores
+    return edge_mask, None

@@ -27,6 +27,7 @@ from utils.mask_utils import (
     clean
 )
 from explainer.graph_explainer import *
+from explainer.node_explainer import *
 from pathlib import Path
 
 
@@ -56,22 +57,22 @@ class Explain(object):
         self.task = "_graph" if self.graph_classification else "_node"
 
         self.explainer_name = explainer_params["explainer_name"]
-        self.list_explained_data = []
+        self.list_explained_y = []
 
         self.focus = explainer_params["focus"]
         self.mask_nature = explainer_params["mask_nature"]
         self.groundtruth = eval(explainer_params["groundtruth"])
         if self.groundtruth:
             self.num_top_edges = explainer_params["num_top_edges"]
-
+        self.init_explained_y = range(0, len(dataset.data.y))
 
     def _eval_top_acc(self, edge_masks):
         print("Top Accuracy is being computed...")
         scores = []
-        for i in range(len(self.list_explained_data)):
+        for i in range(len(self.list_explained_y)):
             edge_mask = torch.Tensor(edge_masks[i]).to(self.device)
             graph = (
-                self.dataset[self.list_explained_data[i]]
+                self.dataset[self.list_explained_y[i]]
                 if self.graph_classification
                 else self.dataset.data
             )
@@ -79,7 +80,7 @@ class Explain(object):
                 not self.graph_classification
             ):
                 G_true, role, true_edge_mask = get_ground_truth_syn(
-                    self.list_explained_data[i], self.data, self.dataset_name
+                    self.list_explained_y[i], self.data, self.dataset_name
                 )
                 G_expl = get_explanation_syn(
                     graph, edge_mask, num_top_edges=self.num_top_edges, top_acc=True
@@ -146,10 +147,10 @@ class Explain(object):
     def _eval_acc(self, edge_masks):
         scores = []
         num_explained_data_with_acc = 0
-        for i in range(len(self.list_explained_data)):
+        for i in range(len(self.list_explained_y)):
             edge_mask = torch.Tensor(edge_masks[i]).to(self.device)
             graph = (
-                self.dataset[self.list_explained_data[i]]
+                self.dataset[self.list_explained_y[i]]
                 if self.graph_classification
                 else self.dataset.data
             )
@@ -157,7 +158,7 @@ class Explain(object):
                 not self.graph_classification
             ):
                 G_true, role, true_edge_mask = get_ground_truth_syn(
-                    self.list_explained_data[i], self.data, self.dataset_name
+                    self.list_explained_y[i], self.data, self.dataset_name
                 )
                 G_expl = get_explanation_syn(
                     graph, edge_mask, num_top_edges=self.num_top_edges, top_acc=False
@@ -264,8 +265,8 @@ class Explain(object):
 
     def related_pred_graph(self, edge_masks, node_feat_masks):
         related_preds = []
-        for i in range(len(self.list_explained_data)):
-            data = self.dataset[self.list_explained_data[i]]
+        for i in range(len(self.list_explained_y)):
+            data = self.dataset[self.list_explained_y[i]]
             data = data.to(self.device)
             data.batch = torch.zeros(data.x.shape[0], dtype=int, device=data.x.device)
             ori_prob_idx = self.model.get_prob(data).cpu().detach().numpy()[0]
@@ -333,7 +334,7 @@ class Explain(object):
             # assert true_label == pred_label, "The label predicted by the GCN does not match the true label."\
             related_preds.append(
                 {
-                    "explained_y_idx": self.list_explained_data[i],
+                    "explained_y_idx": self.list_explained_y[i],
                     "masked": masked_prob_idx,
                     "maskout": maskout_prob_idx,
                     "origin": ori_prob_idx,
@@ -349,7 +350,7 @@ class Explain(object):
         related_preds = []
         data = self.data
         ori_probs = self.model.get_prob(data=self.data)
-        for i in range(len(self.list_explained_data)):
+        for i in range(len(self.list_explained_y)):
             if node_feat_masks[0] is not None:
                 if node_feat_masks[i].ndim == 0:
                     # if type of node feat mask is 'feature'
@@ -406,7 +407,7 @@ class Explain(object):
             masked_probs = self.model.get_prob(masked_data).cpu().detach().numpy()[0]
             maskout_probs = self.model.get_prob(maskout_data).cpu().detach().numpy()[0]
 
-            explained_y_idx = self.list_explained_data[i]
+            explained_y_idx = self.list_explained_y[i]
             ori_prob_idx = ori_probs[explained_y_idx].cpu().detach().numpy()
             masked_prob_idx = masked_probs[explained_y_idx].cpu().detach().numpy()
             maskout_prob_idx = maskout_probs[explained_y_idx].cpu().detach().numpy()
@@ -477,41 +478,40 @@ class Explain(object):
     def compute_mask(self):
         self.explain_function = eval("explain_" + self.explainer_name + self.task)
         print("Computing masks using " + self.explainer_name + " explainer.")
-        if (self.save_dir is not None) and (
+        """if (self.save_dir is not None) and (
             Path(os.path.join(self.save_dir, self.save_name)).is_file()
         ):
-            (   list_explained_data,
+            (   list_explained_y,
                 edge_masks,
                 node_feat_masks,
                 computation_time,
             ) = self.load_mask()
-        else:
-            list_explained_data, edge_masks, node_feat_masks, computation_time = (
-                [],
-                [],
-                [],
-                [],
+        else:"""
+        list_explained_y, edge_masks, node_feat_masks, computation_time = (
+            [],
+            [],
+            [],
+            [],
+        )
+        for i in self.init_explained_y:
+            edge_mask, node_feat_mask, duration_seconds = eval(
+                "self._compute" + self.task
+            )(i)
+            if (
+                (edge_mask is not None)
+                and (hasattr(edge_mask, "__len__"))
+                and (len(edge_mask) > 0)
+            ):
+                edge_masks.append(edge_mask)
+                node_feat_masks.append(node_feat_mask)
+                computation_time.append(duration_seconds)
+                list_explained_y.append(i)
+            self.list_explained_y = list_explained_y
+        if (self.save_dir is not None) and self.save:
+            self.save_mask(
+                list_explained_y, edge_masks, node_feat_masks, computation_time
             )
-            for i in range(len(self.dataset)):
-                data = self.dataset[i].to(self.device)
-                edge_mask, node_feat_mask, duration_seconds = eval(
-                    "self._compute" + self.task
-                )(i)
-                if (
-                    (edge_mask is not None)
-                    and (hasattr(edge_mask, "__len__"))
-                    and (len(edge_mask) > 0)
-                ):
-                    edge_masks.append(edge_mask)
-                    node_feat_masks.append(node_feat_mask)
-                    computation_time.append(duration_seconds)
-                    list_explained_data.append(data.idx)
-                self.list_explained_data = list_explained_data
-            if (self.save_dir is not None) and self.save:
-                self.save_mask(
-                    list_explained_data, edge_masks, node_feat_masks, computation_time
-                )
-        return list_explained_data, edge_masks, node_feat_masks, computation_time
+        return list_explained_y, edge_masks, node_feat_masks, computation_time
     
 
     def clean_mask(self, edge_masks, node_feat_masks):
@@ -525,20 +525,20 @@ class Explain(object):
         return edge_masks, node_feat_masks
 
  
-    def save_mask(self, list_explained_data, edge_masks, node_feat_masks, computation_time):
+    def save_mask(self, list_explained_y, edge_masks, node_feat_masks, computation_time):
         assert self.save_dir is not None, "save_dir is None. Masks are not saved"
         save_path = os.path.join(self.save_dir, self.save_name)
         with open(save_path, "wb") as f:
-            pickle.dump([list_explained_data, edge_masks, node_feat_masks, computation_time], f)
+            pickle.dump([list_explained_y, edge_masks, node_feat_masks, computation_time], f)
 
     def load_mask(self):
         assert self.save_dir is not None, "save_dir is None. No mask to be loaded"
         save_path = os.path.join(self.save_dir, self.save_name)
         with open(save_path, "rb") as f:
             w_list = pickle.load(f)
-        list_explained_data, edge_masks, node_feat_masks, computation_time = tuple(w_list)
-        self.list_explained_data = list_explained_data
-        return list_explained_data, edge_masks, node_feat_masks, computation_time
+        list_explained_y, edge_masks, node_feat_masks, computation_time = tuple(w_list)
+        self.list_explained_y = list_explained_y
+        return list_explained_y, edge_masks, node_feat_masks, computation_time
 
 
 def get_mask_dir_path(args):
@@ -566,12 +566,12 @@ def explain_main(dataset, model, device, args):
         save_name=mask_save_name,
     )
 
-    (   list_explained_data,
+    (   list_explained_y,
         edge_masks,
         node_feat_masks,
         computation_time,
     ) = explainer.compute_mask()
     edge_masks, node_feat_masks = explainer.clean_mask(edge_masks, node_feat_masks)
-    return list_explained_data, edge_masks, node_feat_masks, computation_time
+    return list_explained_y, edge_masks, node_feat_masks, computation_time
 
     

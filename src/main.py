@@ -101,13 +101,13 @@ def main(args, args_group):
             save_dir=os.path.join(args.model_save_dir, args.dataset_name),
             save_name=model_save_name,
         )
-    if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
+    """if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
         trainer.load_model()
-    else:
-        trainer.train(
-            train_params=args_group["train_params"],
-            optimizer_params=args_group["optimizer_params"],
-        )
+    else:"""
+    trainer.train(
+        train_params=args_group["train_params"],
+        optimizer_params=args_group["optimizer_params"],
+    )
     scores, preds = trainer.test()
     scores['threshold'] = 0
     scores['seed'] = args.seed
@@ -117,21 +117,21 @@ def main(args, args_group):
     )
     os.makedirs(save_path, exist_ok=True)
     scores_save_path = os.path.join(save_path, f"{model_save_name}_scores.csv")
-    with open(scores_save_path, 'a') as f:
+    with open(scores_save_path, 'w') as f:
         df_scores.to_csv(f, header=f.tell()==0)
 
 
 
     ###### Generate Explanations ######
-    list_explained_data, edge_masks, node_feat_masks, computation_time = explain_main(dataset, trainer.model, device, args)
+    list_explained_y, edge_masks, node_feat_masks, computation_time = explain_main(dataset, trainer.model, device, args)
 
-    ###### Retrain with Graph degradtaion ######
+    ###### Retrain with Graph degradation ######
     for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
         thresh_edge_masks = transform_edge_masks(edge_masks, strategy=args.retrain_strategy, threshold=t)
         # Modify dataset with the edge masks
         new_dataset = []
         for i, data in enumerate(dataset):
-            assert data.idx.detach().cpu().item() == list_explained_data[i]
+            assert data.idx.detach().cpu().item() == list_explained_y[i]
             data.edge_weight = thresh_edge_masks[i]
             new_dataset.append(data)
 
@@ -155,13 +155,13 @@ def main(args, args_group):
                 save_dir=os.path.join(args.model_save_dir, args.dataset_name, args.explainer_name),
                 save_name=model_save_name + f"_{args.explainer_name}_thresh_{t}",
             )
-        if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
+        """if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
             trainer.load_model()
-        else:
-            trainer.train(
-                train_params=args_group["train_params"],
-                optimizer_params=args_group["optimizer_params"],
-            )
+        else:"""
+        trainer.train(
+            train_params=args_group["train_params"],
+            optimizer_params=args_group["optimizer_params"],
+        )
         scores, preds = trainer.test()
         scores['threshold'] = t
         scores['seed'] = args.seed

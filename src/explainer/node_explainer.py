@@ -335,24 +335,22 @@ def explain_pgexplainer_node(model, data, node_idx, target, device, **kwargs):
 
 ##### Groundtruth Explanations #####
 
-def explain_truth_node(model, data, target, device, **kwargs):
-    print(eval(kwargs["groundtruth"]))
+def explain_truth_node(model, data, node_idx, target, device, **kwargs):
     if not eval(kwargs["groundtruth"]):
         return None, None
     else: 
-        assert kwargs["dataset_name"].startswith(["ba", "tree"])
+        assert kwargs["dataset_name"].startswith(tuple(["ba", "tree"]))
         G_true, role, true_edge_mask = get_ground_truth_syn(
-            kwargs["explained_idx"], data, kwargs["dataset_name"]
+            node_idx, data, kwargs["dataset_name"]
         )
-        print('true_edge_mask', true_edge_mask)
         return true_edge_mask.astype("float"), None
     
-def explain_inverse_node(model, data, target, device, **kwargs):
+def explain_inverse_node(model, data, node_idx, target, device, **kwargs):
     if not eval(kwargs["groundtruth"]):
         return None, None
     else: 
-        assert kwargs["dataset_name"].startswith(["ba", "tree"])
+        assert kwargs["dataset_name"].startswith(tuple(["ba", "tree"]))
         G_true, role, true_edge_mask = get_ground_truth_syn(
-            kwargs["explained_idx"], data, kwargs["dataset_name"]
+            node_idx, data, kwargs["dataset_name"]
         )
         return (1-true_edge_mask).astype("float"), None
