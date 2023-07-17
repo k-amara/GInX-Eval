@@ -313,22 +313,6 @@ def explain_graphcfe_graph(model, data, target, device, **kwargs):
         else:
             print(k, f": {eval_results[k]:.4f}")
     return edge_mask, None
-
-
-
-##### Groundtruth Explanations #####
-
-def explain_truth_graph(model, data, target, device, **kwargs):
-    if not eval(kwargs["groundtruth"]):
-        return None, None
-    else: 
-        return data.edge_mask.cpu().detach().numpy(), None
-    
-def explain_inverse_graph(model, data, target, device, **kwargs):
-    if not eval(kwargs["groundtruth"]):
-        return None, None
-    else: 
-        return (1-data.edge_mask).cpu().detach().numpy(), None
     
 
 
@@ -398,3 +382,20 @@ def explain_gsat_graph(model, data, target, device, **kwargs):
     edge_att, loss_dict, clf_logits = gsat.eval_one_batch(data, epoch=method_config['epochs'])
     edge_mask = edge_att # attention scores
     return edge_mask, None
+
+
+
+##### Groundtruth Explanations #####
+
+def explain_truth_graph(model, data, target, device, **kwargs):
+    if not eval(kwargs["groundtruth"]):
+        return None, None
+    else: 
+        return data.edge_mask.float().cpu().detach().numpy(), None
+    
+def explain_inverse_graph(model, data, target, device, **kwargs):
+    if not eval(kwargs["groundtruth"]):
+        return None, None
+    else: 
+        data
+        return (1-data.edge_mask.float()).cpu().detach().numpy(), None

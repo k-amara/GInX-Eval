@@ -109,7 +109,6 @@ def main(args, args_group):
             train_params=args_group["train_params"],
             optimizer_params=args_group["optimizer_params"],
         )
-    """
     scores, preds = trainer.test()
     scores['threshold'] = 0
     scores['seed'] = args.seed
@@ -122,7 +121,7 @@ def main(args, args_group):
     with open(scores_save_path, 'w') as f:
         df_scores.to_csv(f, header=f.tell()==0)
 
-    """
+
 
     ###### Generate Explanations ######
     list_explained_y, edge_masks, node_feat_masks, computation_time = explain_main(dataset, trainer.model, device, args)

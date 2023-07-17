@@ -1,12 +1,13 @@
 import os
 from explain import explain_main
+from src.dataset import GraphDataset
 import torch
 import yaml
 import numpy as np
 import pandas as pd
 from gnn.model import get_gnnNets
 from train_gnn import TrainModel
-from gendata import get_dataset
+from gendata import get_dataloader, get_dataset
 from utils.mask_utils import transform_edge_masks
 from utils.parser_utils import (
     arg_parse,
@@ -114,17 +115,18 @@ def main(args, args_group):
 
 
     ###### Generate Explanations ######
-    list_explained_data, edge_masks, node_feat_masks, computation_time = explain_main(dataset, trainer.model, device, args)
+    list_explained_y, edge_masks, node_feat_masks, computation_time = explain_main(dataset, trainer.model, device, args)
 
     ###### Retrain with Graph degradtaion ######
-    for t in [0.1, 0.3, 0.5, 0.7, 0.9]:
+    for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
         thresh_edge_masks = transform_edge_masks(edge_masks, strategy=args.retrain_strategy, threshold=t)
         # Modify dataset with the edge masks
         new_dataset = []
         for i, data in enumerate(dataset):
-            assert data.idx.detach().cpu().item() == list_explained_data[i]
-            data.edge_weight = thresh_edge_masks[i]
+            assert data.idx.detach().cpu().item() == list_explained_y[i]
+            data.edge_weight = torch.FloatTensor(thresh_edge_masks[i])
             new_dataset.append(data)
+        new_dataset = GraphDataset(new_dataset)
 
         if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
             trainer.load_model()
@@ -133,6 +135,7 @@ def main(args, args_group):
                 train_params=args_group["train_params"],
                 optimizer_params=args_group["optimizer_params"],
             )
+        trainer.loader, _, _, _ = get_dataloader(new_dataset, **dataloader_params)
         scores, preds = trainer.test()
         scores['threshold'] = t
         scores['seed'] = args.seed
