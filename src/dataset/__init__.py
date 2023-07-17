@@ -3,6 +3,7 @@ from .mol_dataset import MoleculeDataset
 from .syn_dataset import SynGraphDataset
 from .nc_real_dataset import NCRealGraphDataset
 from .benzene import Benzene
+from .graphdataset import GraphDataset
 
 __all__ = [
     "MoleculeDataset",
@@ -10,4 +11,5 @@ __all__ = [
     "Benzene",
     "Mutag",
     "NCRealGraphDataset",
+    "GraphDataset"
 ]

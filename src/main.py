@@ -1,5 +1,6 @@
 import os
 from explain import explain_main
+from src.dataset import GraphDataset
 import torch
 import yaml
 import numpy as np
@@ -101,13 +102,14 @@ def main(args, args_group):
             save_dir=os.path.join(args.model_save_dir, args.dataset_name),
             save_name=model_save_name,
         )
-    """if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
+    if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
         trainer.load_model()
-    else:"""
-    trainer.train(
-        train_params=args_group["train_params"],
-        optimizer_params=args_group["optimizer_params"],
-    )
+    else:
+        trainer.train(
+            train_params=args_group["train_params"],
+            optimizer_params=args_group["optimizer_params"],
+        )
+    """
     scores, preds = trainer.test()
     scores['threshold'] = 0
     scores['seed'] = args.seed
@@ -120,7 +122,7 @@ def main(args, args_group):
     with open(scores_save_path, 'w') as f:
         df_scores.to_csv(f, header=f.tell()==0)
 
-
+    """
 
     ###### Generate Explanations ######
     list_explained_y, edge_masks, node_feat_masks, computation_time = explain_main(dataset, trainer.model, device, args)
@@ -132,14 +134,15 @@ def main(args, args_group):
         new_dataset = []
         for i, data in enumerate(dataset):
             assert data.idx.detach().cpu().item() == list_explained_y[i]
-            data.edge_weight = thresh_edge_masks[i]
+            data.edge_weight = torch.FloatTensor(thresh_edge_masks[i])
             new_dataset.append(data)
+        new_dataset = GraphDataset(new_dataset)
 
         model = get_gnnNets(args.num_node_features, args.num_classes, model_params)
         if eval(args.graph_classification):
             trainer = TrainModel(
                 model=model,
-                dataset=dataset,
+                dataset=new_dataset,
                 device=device,
                 graph_classification=eval(args.graph_classification),
                 save_dir=os.path.join(args.model_save_dir, args.dataset_name, args.explainer_name),
@@ -149,19 +152,19 @@ def main(args, args_group):
         else:
             trainer = TrainModel(
                 model=model,
-                dataset=dataset,
+                dataset=new_dataset,
                 device=device,
                 graph_classification=eval(args.graph_classification),
                 save_dir=os.path.join(args.model_save_dir, args.dataset_name, args.explainer_name),
                 save_name=model_save_name + f"_{args.explainer_name}_thresh_{t}",
             )
-        """if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
+        if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
             trainer.load_model()
-        else:"""
-        trainer.train(
-            train_params=args_group["train_params"],
-            optimizer_params=args_group["optimizer_params"],
-        )
+        else:
+            trainer.train(
+                train_params=args_group["train_params"],
+                optimizer_params=args_group["optimizer_params"],
+            )
         scores, preds = trainer.test()
         scores['threshold'] = t
         scores['seed'] = args.seed
