@@ -8,6 +8,7 @@ from dataset import (
     NCRealGraphDataset,
     Benzene,
     Mutag,
+    MNIST75sp_Binary,
 )
 from torch import default_generator
 from utils.parser_utils import arg_parse, get_graph_size_args
@@ -28,6 +29,8 @@ def get_dataset(dataset_root, **kwargs):
         )
         dataset.process()
         return dataset
+    elif dataset_name.lower() == "mnist_bin":
+        return MNIST75sp_Binary(root=dataset_root, name=dataset_name)
     elif dataset_name.lower() in list(SynGraphDataset.names.keys()):
         dataset = SynGraphDataset(
             root=dataset_root,

@@ -12,15 +12,15 @@ from torch_geometric.utils import to_networkx
 from gnn.model import GCNConv, GATConv, GINEConv, TransformerConv
 from gendata import get_dataloader
 from utils.io_utils import write_to_json
-
+from utils.gen_utils import get_cmn_edges
 from explainer.gnnexplainer import TargetedGNNExplainer
 from explainer.gradcam import GraphLayerGradCam
 from explainer.subgraphx import SubgraphX
 from explainer.rcexplainer import RCExplainer_Batch, train_rcexplainer
 from explainer.explainer_utils.rcexplainer.rc_train import test_policy
-from explainer.graphcfe import GraphCFE, train, test, baseline_cf, add_list_in_dict, compute_counterfactual
+from explainer.graphcfe import GraphCFE, train, test, add_list_in_dict, compute_counterfactual
 from explainer.gsat import GSAT, ExtractorMLP, gsat_get_config
-from explainer.explainer_utils.gsat import Writer, init_metric_dict, save_checkpoint, load_checkpoint
+from explainer.explainer_utils.gsat import init_metric_dict, save_checkpoint, load_checkpoint
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from explainer.gflowexplainer import GFlowExplainer, gflow_parse_args
 from explainer.explainer_utils.gflowexplainer.agent import create_agent

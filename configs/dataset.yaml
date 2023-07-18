@@ -42,6 +42,11 @@ bbbp:
   explained_target: 1
 
 
+mnist_bin:
+  <<: *common_params
+  groundtruth: "True"
+
+
 common_params_syn: &common_params_syn
   groundtruth: "True"
   graph_classification: "False"
