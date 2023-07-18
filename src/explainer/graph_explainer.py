@@ -14,12 +14,16 @@ from utils.io_utils import write_to_json
 
 from explainer.gnnexplainer import TargetedGNNExplainer
 from explainer.gradcam import GraphLayerGradCam
+from explainer.subgraphx import SubgraphX
 from explainer.rcexplainer import RCExplainer_Batch, train_rcexplainer
 from explainer.explainer_utils.rcexplainer.rc_train import test_policy
 from explainer.graphcfe import GraphCFE, train, test, baseline_cf, add_list_in_dict, compute_counterfactual
 from explainer.gsat import GSAT, ExtractorMLP, gsat_get_config
 from explainer.explainer_utils.gsat import Writer, init_metric_dict, save_checkpoint, load_checkpoint
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from explainer.gflowexplainer import GFlowExplainer, gflow_parse_args
+from explainer.explainer_utils.gflowexplainer.agent import create_agent
+from explainer.diffexplainer import DiffExplainer, diff_parse_args
 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
@@ -169,6 +173,7 @@ def explain_gnnexplainer_graph(model, data, target, device, **kwargs):
     return edge_mask, node_feat_mask
 
 
+
 def explain_gradcam_graph(model, data, target, device, **kwargs):
     # Captum default implementation of LayerGradCam does not average over nodes for different channels because of
     # different assumptions on tensor shapes
@@ -191,6 +196,34 @@ def explain_gradcam_graph(model, data, target, device, **kwargs):
     edge_mask = sigmoid(node_attr_to_edge(data.edge_index, node_attr))
     return edge_mask.astype("float"), None
 
+
+def explain_subgraphx_graph(model, data, target, device, **kwargs):
+    subgraphx = SubgraphX(
+        model,
+        kwargs["num_classes"],
+        device,
+        num_hops=kwargs["num_layers"],
+        explain_graph=True,
+        rollout=20,
+        min_atoms=4,
+        expand_atoms=14,
+        high2low=True,
+        sample_num=50,
+        reward_method="mc_shapley",
+        subgraph_building_method="zero_filling",
+        local_radius=4,
+    )
+    edge_mask = subgraphx.explain(
+        data.x,
+        data.edge_index,
+        data.edge_attr,
+        max_nodes=kwargs["num_top_edges"],
+        label=target,
+    )
+    return edge_mask.astype("float"), None
+
+
+##### Non-generative explainer ######
 
 def explain_rcexplainer_graph(model, data, target, device, **kwargs):
     dataset_name = kwargs["dataset_name"]
@@ -382,6 +415,110 @@ def explain_gsat_graph(model, data, target, device, **kwargs):
     edge_att, loss_dict, clf_logits = gsat.eval_one_batch(data, epoch=method_config['epochs'])
     edge_mask = edge_att # attention scores
     return edge_mask, None
+
+
+def function_with_args_and_default_kwargs(dict_args, optional_args=None):
+    parser = argparse.ArgumentParser()
+    # add some arguments
+    # add the other arguments
+    for k, v in dict_args.items():
+        parser.add_argument('--' + k, default=v)
+    # args = parser.parse_args(optional_args)
+    return parser
+
+def explain_gflowexplainer_graph(model, data, target, device, **kwargs):
+    dataset_name = kwargs["dataset_name"]
+    seed = kwargs["seed"]
+    # hidden_dim = kwargs["hidden_dim"]
+    subdir = os.path.join(kwargs["model_save_dir"], "gflowexplainer")
+    os.makedirs(subdir, exist_ok=True)
+    gflowexplainer_saving_path = os.path.join(subdir, f"gflowexplainer_{dataset_name}_{str(device)}_{seed}.pickle")
+    parser = function_with_args_and_default_kwargs(dict_args=kwargs, optional_args=None)
+    train_params = gflow_parse_args(parser)
+    train_params.n_hidden = kwargs["hidden_dim"]
+    train_params.n_input = kwargs["num_node_features"]
+    if os.path.isfile(gflowexplainer_saving_path):
+        print("Load saved GFlowExplainer model...")
+        gflowexplainer_agent = create_agent(train_params, device)
+        state_dict = torch.load(gflowexplainer_saving_path)
+        gflowexplainer_agent.load_state_dict(state_dict)
+        gflowexplainer_agent = gflowexplainer_agent.to(device)
+    else:
+        train_size = min(len(kwargs["dataset"]), 500)
+        explain_dataset_idx = random.sample(range(len(kwargs["dataset"])), k=train_size)
+        explain_dataset = kwargs["dataset"][explain_dataset_idx]
+        gflowexplainer = GFlowExplainer(model, device)
+        t0 = time.time()
+        gflowexplainer_agent = gflowexplainer.train_explainer(train_params, explain_dataset, **kwargs)
+        train_time = time.time() - t0
+        print("Save GFlowExplainer model...")
+        # Save the file
+        print('gflowexplainer_agent', gflowexplainer_agent)
+        torch.save(gflowexplainer_agent.state_dict(), gflowexplainer_saving_path)
+        train_time_file = os.path.join(subdir, f"gflowexplainer_train_time.json")
+        entry = {"dataset": dataset_name, "train_time": train_time, "seed": seed, "device": str(device)}
+        write_to_json(entry, train_time_file)
+
+    # foward_multisteps - origin of this function?
+    _, edge_mask = gflowexplainer_agent.foward_multisteps(data, gflowexplainer.model)
+    # convert removal priority into importance score: rank 3 --> importance score 3/num_edges
+    edge_mask = edge_mask/len(edge_mask)
+    # edge_mask[i]: indicate the edge of the i-th removal
+    # edge_mask = [0,6,3,2,5,4,1] --> [0,1] should be removed first (rank 0), [6,0] should be removed second (rank 1)
+    # edge_index = [[0,0,2,3,4,5,6], [1,2,3,4,5,6,0]]
+    return edge_mask, None
+
+def explain_diffexplainer_graph(model, data, target, device, **kwargs):
+    dataset_name = kwargs["dataset_name"]
+    seed = kwargs["seed"]
+    diffexplainer = DiffExplainer(model, device)
+    
+    subdir = os.path.join(kwargs["model_save_dir"], "diffexplainer")
+    os.makedirs(subdir, exist_ok=True)
+    diffexplainer_saving_path = os.path.join(subdir, f"diffexplainer_{dataset_name}_{str(device)}_{seed}.pth")
+
+    parser = function_with_args_and_default_kwargs(dict_args=kwargs, optional_args=None)
+    train_params = diff_parse_args(parser)
+    train_params.n_hidden = kwargs["hidden_dim"]
+    train_params.feature_in = kwargs["num_node_features"]
+    train_params.noise_list = None
+    train_params.root = subdir
+
+    if os.path.isfile(diffexplainer_saving_path):
+        print("Load saved DiffExplainer model...")
+        diffexplainer  = torch.load(diffexplainer_saving_path, map_location=device)
+    else:
+        # data loader
+        train_size = min(len(kwargs["dataset"]), 500)
+        explain_dataset_idx = random.sample(range(len(kwargs["dataset"])), k=train_size)
+        explain_dataset = kwargs["dataset"][explain_dataset_idx]
+        dataloader_params = {
+            "batch_size": kwargs["batch_size"],
+            "random_split_flag": kwargs["random_split_flag"],
+            "data_split_ratio": kwargs["data_split_ratio"],
+            "seed": kwargs["seed"],
+        }
+        loader, train_dataset, _, test_dataset = get_dataloader(explain_dataset, **dataloader_params)
+
+        t0 = time.time()
+        diffexplainer.explain_graph_task(train_params, train_dataset, test_dataset)
+        train_time = time.time() - t0
+
+        print("Save DiffExplainer model...")
+        torch.save(diffexplainer, diffexplainer_saving_path)
+        
+        train_time_file = os.path.join(subdir, f"diffexplainer_train_time.json")
+        entry = {"dataset": dataset_name, "train_time": train_time, "seed": seed, "device": str(device)}
+        write_to_json(entry, train_time_file)
+
+    # foward_multisteps - origin of this function?
+    data.num_graphs = 1
+    data.batch = torch.zeros(data.num_nodes, dtype=torch.long)
+    explanatory_subgraph = diffexplainer.explanation_generate(train_params, data)
+    cmn_edge_idx, cmn_edges, cmn_edge_weight = get_cmn_edges(explanatory_subgraph.edge_index, explanatory_subgraph.edge_weight.cpu().detach().numpy(), data.edge_index.cpu().detach().numpy())
+    edge_mask = cmn_edge_weight
+    return edge_mask, None
+
 
 
 

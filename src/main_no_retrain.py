@@ -109,9 +109,8 @@ def main(args, args_group):
     )
     os.makedirs(save_path, exist_ok=True)
     scores_save_path = os.path.join(save_path, f"{model_save_name}_scores.csv")
-    with open(scores_save_path, 'a') as f:
+    with open(scores_save_path, 'w') as f:
         df_scores.to_csv(f, header=f.tell()==0)
-
 
 
     ###### Generate Explanations ######
@@ -128,13 +127,6 @@ def main(args, args_group):
             new_dataset.append(data)
         new_dataset = GraphDataset(new_dataset)
 
-        if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
-            trainer.load_model()
-        else:
-            trainer.train(
-                train_params=args_group["train_params"],
-                optimizer_params=args_group["optimizer_params"],
-            )
         trainer.loader, _, _, _ = get_dataloader(new_dataset, **dataloader_params)
         scores, preds = trainer.test()
         scores['threshold'] = t
