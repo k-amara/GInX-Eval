@@ -81,6 +81,7 @@ class MNIST75sp_Binary(InMemoryDataset):
     def download(self):
         for file in self.raw_file_names:
             if not osp.exists(osp.join(self.raw_dir, file)):
+                print('data stored at : ', osp.join(self.raw_dir, file))
                 print(
                     "raw data of `{}` doesn't exist, please download from our github.".format(
                         file
