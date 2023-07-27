@@ -129,13 +129,12 @@ def main(args, args_group):
     list_explained_y, edge_masks, node_feat_masks, computation_time = explain_main(dataset, trainer.model, device, args)
 
     ###### Retrain with Graph degradation ######
-    for t in [0.8]:#[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+    for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
         thresh_edge_masks = transform_edge_masks(edge_masks, strategy=args.retrain_strategy, threshold=t)
         # Modify dataset with the edge masks
         new_dataset = []
         for i, data in enumerate(dataset):
             assert data.idx.detach().cpu().item() == list_explained_y[i]
-            #data.clone()
             new_edge_index = data.edge_index[:, thresh_edge_masks[i]>0]
             new_edge_attr = data.edge_attr[thresh_edge_masks[i]>0]
             new_edge_weight = torch.ones(new_edge_attr.size(0), dtype=torch.float, device=device)
@@ -146,9 +145,6 @@ def main(args, args_group):
             new_data = Data(x = new_x, edge_index = new_new_edge_index, edge_attr = new_edge_attr, edge_weight = new_edge_weight, y = data.y, idx = data.idx)
             new_dataset.append(new_data)
         new_dataset = GraphDataset(new_dataset)
-        print(f"Number of graphs in the new dataset: {len(new_dataset)}")
-        print("First graph in the new dataset:", new_dataset[0])
-        print(new_dataset[0].edge_index.max(), len(new_dataset[0].x))
 
         model = get_gnnNets(args.num_node_features, args.num_classes, model_params)
         trainer = TrainModel(
