@@ -1,5 +1,7 @@
 import argparse
 import numpy as np
+from src.explainer.pgexplainer import PGExplainer
+from src.explainer.pgmexplainer import Graph_Explainer
 import torch
 import os
 import dill
@@ -12,7 +14,7 @@ from torch_geometric.utils import to_networkx
 from gnn.model import GCNConv, GATConv, GINEConv, TransformerConv
 from gendata import get_dataloader
 from utils.io_utils import write_to_json
-from utils.gen_utils import get_cmn_edges
+from utils.gen_utils import get_cmn_edges, sample_large_graph
 from explainer.gnnexplainer import TargetedGNNExplainer
 from explainer.gradcam import GraphLayerGradCam
 from explainer.subgraphx import SubgraphX
@@ -223,8 +225,60 @@ def explain_subgraphx_graph(model, data, target, device, **kwargs):
     )
     return edge_mask.astype("float"), None
 
+def explain_pgmexplainer_graph(model, data, target, device, **kwargs):
+    explainer = Graph_Explainer(
+        model, data.edge_index, data.edge_attr, data.x, device=device, print_result=0
+    )
+    explanation = explainer.explain(
+        num_samples=1000,
+        percentage=10,
+        top_node=None,
+        p_threshold=0.05,
+        pred_threshold=0.1,
+    )
+    node_attr = np.zeros(data.x.shape[0])
+    for node, p_value in explanation.items():
+        node_attr[node] = 1 - p_value
+    edge_mask = node_attr_to_edge(data.edge_index, node_attr)
+    return edge_mask.astype("float"), None
+
 
 ##### Non-generative explainer ######
+
+def explain_pgexplainer_graph(model, data, target, device, **kwargs):
+    seed = kwargs['seed']
+    pgexplainer = PGExplainer(
+        model,
+        in_channels=kwargs["hidden_dim"] * 2,
+        device=device,
+        num_hops=kwargs["num_layers"],
+        explain_graph=True,
+    )
+    dataset_name = kwargs["dataset_name"]
+    subdir = os.path.join(kwargs["model_save_dir"], "pgexplainer")
+    os.makedirs(subdir, exist_ok=True)
+    pgexplainer_saving_path = os.path.join(subdir, f"pgexplainer_{dataset_name}_{str(device)}_{seed}.pth")
+    if os.path.isfile(pgexplainer_saving_path):
+        print("Load saved PGExplainer model...")
+        state_dict = torch.load(pgexplainer_saving_path)
+        pgexplainer.load_state_dict(state_dict)
+    else:
+        data = sample_large_graph(data)
+        t0 = time.time()
+        pgexplainer.train_explanation_network(kwargs["dataset"][:200])
+        train_time = time.time() - t0
+        print("Save PGExplainer model...")
+        torch.save(pgexplainer.state_dict(), pgexplainer_saving_path)
+        train_time_file = os.path.join(subdir, f"pgexplainer_train_time.json")
+        entry = {"dataset": dataset_name, "train_time": train_time, "seed": seed, "device": str(device)}
+        write_to_json(entry, train_time_file)
+        
+    embed = model.get_emb(data=data)
+    _, edge_mask = pgexplainer.explain(
+        data.x, data.edge_index, data.edge_attr, embed=embed, tmp=1.0, training=False
+    )
+    edge_mask = edge_mask.cpu().detach().numpy()
+    return edge_mask.astype("float"), None
 
 def explain_rcexplainer_graph(model, data, target, device, **kwargs):
     dataset_name = kwargs["dataset_name"]

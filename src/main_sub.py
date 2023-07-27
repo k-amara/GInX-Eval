@@ -19,6 +19,7 @@ from utils.parser_utils import (
 )
 from pathlib import Path
 from torch_geometric.utils import degree
+from torch_geometric.data import Data
 
 
 def main(args, args_group):
@@ -115,7 +116,7 @@ def main(args, args_group):
     scores['seed'] = args.seed
     df_scores = pd.DataFrame(scores, index=[0])
     save_path = os.path.join(
-        args.result_save_dir+'_sub', args.dataset_name, args.explainer_name
+        args.result_save_dir, args.dataset_name, args.explainer_name
     )
     os.makedirs(save_path, exist_ok=True)
     scores_save_path = os.path.join(save_path, f"{model_save_name}_scores.csv")
@@ -128,40 +129,37 @@ def main(args, args_group):
     list_explained_y, edge_masks, node_feat_masks, computation_time = explain_main(dataset, trainer.model, device, args)
 
     ###### Retrain with Graph degradation ######
-    for t in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+    for t in [0.8]:#[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
         thresh_edge_masks = transform_edge_masks(edge_masks, strategy=args.retrain_strategy, threshold=t)
         # Modify dataset with the edge masks
         new_dataset = []
         for i, data in enumerate(dataset):
             assert data.idx.detach().cpu().item() == list_explained_y[i]
-            new_data = copy.deepcopy(data)
-            new_data.edge_index = data.edge_index[:, thresh_edge_masks[i]>0]
-            new_data.edge_attr = data.edge_attr[thresh_edge_masks[i]>0]
-            new_data.edge_weight = None
-            new_data.x = data.x[np.unique(new_data.edge_index)]
+            #data.clone()
+            new_edge_index = data.edge_index[:, thresh_edge_masks[i]>0]
+            new_edge_attr = data.edge_attr[thresh_edge_masks[i]>0]
+            new_edge_weight = torch.ones(new_edge_attr.size(0), dtype=torch.float, device=device)
+            new_nodes = torch.sort(torch.unique(new_edge_index))[0]
+            new_x = data.x[new_nodes]
+            dict = {new_nodes[i].item(): i for i in range(len(new_nodes))}
+            new_new_edge_index = torch.tensor([[dict[new_edge_index[0, j].item()], dict[new_edge_index[1, j].item()]] for j in range(new_edge_index.size(1))], dtype=torch.long, device=device).t()
+            new_data = Data(x = new_x, edge_index = new_new_edge_index, edge_attr = new_edge_attr, edge_weight = new_edge_weight, y = data.y, idx = data.idx)
             new_dataset.append(new_data)
         new_dataset = GraphDataset(new_dataset)
+        print(f"Number of graphs in the new dataset: {len(new_dataset)}")
+        print("First graph in the new dataset:", new_dataset[0])
+        print(new_dataset[0].edge_index.max(), len(new_dataset[0].x))
 
         model = get_gnnNets(args.num_node_features, args.num_classes, model_params)
-        if eval(args.graph_classification):
-            trainer = TrainModel(
-                model=model,
-                dataset=new_dataset,
-                device=device,
-                graph_classification=eval(args.graph_classification),
-                save_dir=os.path.join(args.model_save_dir, args.dataset_name, args.explainer_name),
-                save_name=model_save_name + f"_{args.explainer_name}_sub_thresh_{t}",
-                dataloader_params=dataloader_params,
-            )
-        else:
-            trainer = TrainModel(
-                model=model,
-                dataset=new_dataset,
-                device=device,
-                graph_classification=eval(args.graph_classification),
-                save_dir=os.path.join(args.model_save_dir, args.dataset_name, args.explainer_name),
-                save_name=model_save_name + f"_{args.explainer_name}_sub_thresh_{t}",
-            )
+        trainer = TrainModel(
+            model=model,
+            dataset=new_dataset,
+            device=device,
+            graph_classification=eval(args.graph_classification),
+            save_dir=os.path.join(args.model_save_dir, 'subX', args.dataset_name, args.explainer_name),
+            save_name=model_save_name + f"_{args.explainer_name}_sub_thresh_{t}",
+            dataloader_params=dataloader_params,
+        )
         if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
             trainer.load_model()
         else:

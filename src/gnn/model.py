@@ -236,6 +236,8 @@ class GNN_basic(GNNBase):
 
     def get_emb(self, *args, **kwargs):
         x, edge_index, edge_attr, edge_weight, _ = self._argsparse(*args, **kwargs)
+        #print(x.shape, edge_index.shape, edge_attr.shape, edge_weight.shape)
+        #print(edge_index.max(), edge_index.min())
         for layer in self.convs:
             x = layer(x, edge_index, edge_attr * edge_weight[:, None])
             x = F.relu(x)
