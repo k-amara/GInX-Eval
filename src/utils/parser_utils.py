@@ -122,6 +122,16 @@ def arg_parse():
         default="False",
     )
 
+    # active parameters
+    parser_active_params = parser.add_argument_group("active_params")
+    parser_active_params.add_argument("--active_selection", type=str, default='rmv')
+    parser_active_params.add_argument("--active_loss", type=str, default='loss')
+    parser_active_params.add_argument("--active_model", type=str, default='new')
+    parser_active_params.add_argument("--active_threshold", type=float, default=0.2)
+    parser_active_params.add_argument("--active_epochs", type=int, default=5)
+    parser_active_params.add_argument("--active_lambda", type=float, default=1)
+
+    
     # dataset parameters
     parser_dataset_params = parser.add_argument_group("dataset_params")
     parser_dataset_params.add_argument("--dataset_name", type=str)

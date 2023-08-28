@@ -2,6 +2,9 @@ import argparse
 import numpy as np
 from src.explainer.pgexplainer import PGExplainer
 from src.explainer.pgmexplainer import Graph_Explainer
+from src.train_gnn import TrainModel
+from src.dataset import GraphDataset
+from src.utils.mask_utils import keep_hard, remove_hard
 import torch
 import os
 import dill
@@ -11,10 +14,10 @@ from copy import deepcopy
 from captum.attr import IntegratedGradients, Saliency
 from torch_geometric.data import Data
 from torch_geometric.utils import to_networkx
-from gnn.model import GCNConv, GATConv, GINEConv, TransformerConv
+from gnn.model import GCNConv, GATConv, GINEConv, TransformerConv, get_gnnNets
 from gendata import get_dataloader
 from utils.io_utils import write_to_json
-from utils.gen_utils import get_cmn_edges, sample_large_graph
+from utils.gen_utils import extract_hard_explanation, get_cmn_edges, sample_large_graph
 from explainer.gnnexplainer import TargetedGNNExplainer
 from explainer.gradcam import GraphLayerGradCam
 from explainer.subgraphx import SubgraphX
@@ -470,7 +473,6 @@ def explain_gsat_graph(model, data, target, device, **kwargs):
     edge_att, loss_dict, clf_logits = gsat.eval_one_batch(data, epoch=method_config['epochs'])
     edge_mask = edge_att # attention scores
     return edge_mask, None
-
 
 def function_with_args_and_default_kwargs(dict_args, optional_args=None):
     parser = argparse.ArgumentParser()

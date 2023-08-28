@@ -99,10 +99,11 @@ class TrainModel(object):
         return eval_loss, eval_acc, eval_balanced_acc, eval_f1_score
 
     def test(self):
-        state_dict = torch.load(
-            os.path.join(self.save_dir, f"{self.save_name}_best.pth")
-        )["net"]
-        self.model.load_state_dict(state_dict)
+        if self.save:
+            state_dict = torch.load(
+                os.path.join(self.save_dir, f"{self.save_name}_best.pth")
+            )["net"]
+            self.model.load_state_dict(state_dict)
         self.model = self.model.to(self.device)
         self.model.eval()
         if self.graph_classification:

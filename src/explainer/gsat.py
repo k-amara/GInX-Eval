@@ -32,6 +32,7 @@ def gsat_get_config():
                 'pred_loss_coef': 1,
                 'info_loss_coef': 1,
                 'epochs': 100,
+                'active_epochs': 5,
                 'lr': 1.0e-3,
                 'weight_decay': 3.0e-6,
                 'from_scratch': True,
@@ -67,6 +68,7 @@ class GSAT(nn.Module):
         self.epochs = method_config['epochs']
         self.pred_loss_coef = method_config['pred_loss_coef']
         self.info_loss_coef = method_config['info_loss_coef']
+        self.ginex_loss = 0
 
         self.fix_r = method_config.get('fix_r', None)
         self.decay_interval = method_config.get('decay_interval', None)
@@ -129,10 +131,23 @@ class GSAT(nn.Module):
         loss.backward()
         self.optimizer.step()
         return att.data.cpu().reshape(-1), loss_dict, clf_logits.data.cpu()
+    
+    def train_one_batch_update(self, data, epoch):
+        self.extractor.train()
+        self.clf.train()
+
+        att, loss, loss_dict, clf_logits = self.forward_pass(data, epoch, training=True)
+        loss += self.ginex_loss
+        print('ginex loss: ', self.ginex_loss)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        return att.data.cpu().reshape(-1), loss_dict, clf_logits.data.cpu()
+
 
     def run_one_epoch(self, data_loader, epoch, phase, use_edge_attr):
         loader_len = len(data_loader)
-        run_one_batch = self.train_one_batch if phase == 'train' else self.eval_one_batch
+        run_one_batch = self.train_one_batch_update if phase == 'train' else self.eval_one_batch
         phase = 'test ' if phase == 'test' else phase  # align tqdm desc bar
 
         all_loss_dict = {}

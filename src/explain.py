@@ -27,6 +27,7 @@ from utils.mask_utils import (
     clean
 )
 from explainer.graph_explainer import *
+from explainer.active_explainer import *
 from explainer.node_explainer import *
 from pathlib import Path
 
@@ -476,7 +477,10 @@ class Explain(object):
         )
 
     def compute_mask(self):
-        self.explain_function = eval("explain_" + self.explainer_name + self.task)
+        if self.explainer_name.startswith("gsat_active"):
+            self.explain_function = eval("explain_" + "gsat_active" + self.task)
+        else:
+            self.explain_function = eval("explain_" + self.explainer_name + self.task)
         print("Computing masks using " + self.explainer_name + " explainer.")
         """if (self.save_dir is not None) and (
             Path(os.path.join(self.save_dir, self.save_name)).is_file()
@@ -555,6 +559,7 @@ def get_mask_dir_path(args):
 def explain_main(dataset, model, device, args):
     args.dataset = dataset
     mask_save_name = get_mask_dir_path(args)
+
     explainer = Explain(
         model=model,
         dataset=dataset,

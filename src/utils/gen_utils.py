@@ -1,5 +1,6 @@
 import random
 from collections import defaultdict
+from src.utils.mask_utils import remove_hard
 from torch_geometric.data import Data
 import numpy as np
 import pandas as pd
@@ -428,3 +429,20 @@ def node_attr_to_edge(edge_index, node_mask):
     edge_mask += node_mask[edge_index[0].cpu().numpy()]
     edge_mask += node_mask[edge_index[1].cpu().numpy()]
     return edge_mask
+
+
+def extract_hard_explanation(data, edge_mask, device):
+    new_edge_index = data.edge_index[:, edge_mask>0]
+    new_edge_attr = data.edge_attr[edge_mask>0]
+    new_edge_weight = torch.ones(new_edge_attr.size(0), dtype=torch.float, device=device)
+    new_nodes = torch.sort(torch.unique(new_edge_index))[0]
+    new_x = data.x[new_nodes]
+    dict = {new_nodes[i].item(): i for i in range(len(new_nodes))}
+    new_new_edge_index = torch.tensor([[dict[new_edge_index[0, j].item()], dict[new_edge_index[1, j].item()]] for j in range(new_edge_index.size(1))], dtype=torch.long, device=device).t()
+    new_data = Data(x = new_x, edge_index = new_new_edge_index, edge_attr = new_edge_attr, edge_weight = new_edge_weight, y = data.y, idx = data.idx).to(device)
+    return new_data
+
+def extract_soft_explanation(data, edge_mask, device):
+    data.edge_weight = torch.FloatTensor(edge_mask)
+    return data.to(device)
+    
