@@ -1,5 +1,5 @@
-from evaluation.BaseEvaluation import BaseEvaluation
-from evaluation.utils import evaluation_auc
+from src.explainer.explainer_utils.gflowexplainer2.evaluation.BaseEvaluation import BaseEvaluation
+from src.explainer.explainer_utils.gflowexplainer2.evaluation.utils import evaluation_auc
 
 
 class AUCEvaluation(BaseEvaluation):

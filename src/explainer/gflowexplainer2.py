@@ -8,18 +8,60 @@ import pandas as pd
 import torch
 from torch import optim
 import networkx as nx
-from components import *
-from utils import *
+from src.explainer.explainer_utils.gflowexplainer2.components import *
+from src.explainer.explainer_utils.gflowexplainer2.utils import *
 import matplotlib.pyplot as plt
-from datasets import dataset_loaders, ground_truth_loaders
-from models import model_selector
-from evaluation.AUCEvaluation import AUCEvaluation
-from metrics import *
+from src.explainer.explainer_utils.gflowexplainer2.datasets import dataset_loaders, ground_truth_loaders
+from src.explainer.explainer_utils.gflowexplainer2.models import model_selector
+from src.explainer.explainer_utils.gflowexplainer2.evaluation.AUCEvaluation import AUCEvaluation
+from src.explainer.explainer_utils.gflowexplainer2.metrics import *
 import torch_geometric as ptgeom
 import matplotlib
 matplotlib.use("AGG")
 torch.set_num_threads (4)
 
+
+
+# gflow explainer related parameters
+def gflow2_parse_args(parser):
+    # parser = argparse.ArgumentParser(description="Train GflowExplainers")
+    # Dataset + Trained Model
+    parser.add_argument('--model', type=str, default='GNN') # PG / GNN
+    parser.add_argument('--ratio', type=float, default=0)
+    parser.add_argument('--draw', type=bool, default=False) # 画图
+    parser.add_argument('--ablation', type=int, default=1)  # [1,2,3,4]
+
+    # seed 2 , size_reg 0  ,radius_penalty 0
+    parser.add_argument('--with_attr', action='store_true', default=True)
+    parser.add_argument('--n_hop', type=int, default=3)
+    parser.add_argument('--max_size', type=int, default=20)
+
+    # Locator
+    parser.add_argument('--pretrain_l_sample_rate', type=float, default=1.0)
+    parser.add_argument('--update_l_sample_rate', type=float, default=0.2)
+    parser.add_argument('--l_lr', type=float, default=1e-2)
+    parser.add_argument('--pretrain_l_iter', type=int, default=200)
+
+
+    # Generator
+    parser.add_argument('--hidden_size', type=int, default=64)
+    parser.add_argument('--g_lr', type=float, default=1e-2)
+    parser.add_argument('--n_rollouts', type=int, default=5)
+    parser.add_argument('--pretrain_g_batch_size', type=int, default=0)
+    parser.add_argument('--g_batch_size', type=int, default=16)
+
+    # Regularization
+    parser.add_argument('--size_reg', type=float, default= 0.01) #  0.01
+    parser.add_argument('--sim_reg', type=float, default=1)#  1
+    parser.add_argument('--radius_penalty', type=float, default=0.1)#  0.1
+    parser.add_argument('--entropy_coef', type=float, default=0.)
+
+    # coordinate
+    parser.add_argument('--n_epochs', type=int, default=80)  # default=10
+    parser.add_argument('--n_g_updates', type=int, default=1)
+    parser.add_argument('--n_l_updates', type=int, default=10)
+    parser.add_argument('--eval_every', type=int, default=1)
+    return parser.parse_args()
 
 class DummyWriter:
 
@@ -205,7 +247,7 @@ class Runner:
     def load_data(self, shuffle=True):
         args = self.args
         # Load complete dataset
-        graphs, features, ground_truth_labels, _, _, test_mask = dataset_loaders.load_dataset(args.dataset, shuffle=shuffle)
+        graphs, features, ground_truth_labels, _, _, test_mask = dataset_loaders.load_dataset(args.data_save_dir, shuffle=shuffle, **args)
         if isinstance(graphs, list):  # We're working with a model for graph classification
             task = "graph_task"
         else:

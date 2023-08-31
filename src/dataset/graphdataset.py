@@ -1,5 +1,3 @@
-import torch
-from src.utils.gen_utils import from_edge_index_to_adj, padded_datalist
 from torch_geometric.data import InMemoryDataset
 
 

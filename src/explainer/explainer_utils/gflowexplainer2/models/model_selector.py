@@ -1,10 +1,10 @@
 import torch
 import os
 
-from models.GNN_paper import NodeGCN as GNN_NodeGCN
-from models.GNN_paper import GraphGCN as GNN_GraphGCN
-from models.PG_paper import NodeGCN as PG_NodeGCN
-from models.PG_paper import GraphGCN as PG_GraphGCN
+from src.explainer.explainer_utils.gflowexplainer2.models.GNN_paper import NodeGCN as GNN_NodeGCN
+from src.explainer.explainer_utils.gflowexplainer2.models.GNN_paper import GraphGCN as GNN_GraphGCN
+from src.explainer.explainer_utils.gflowexplainer2.models.PG_paper import NodeGCN as PG_NodeGCN
+from src.explainer.explainer_utils.gflowexplainer2.models.PG_paper import GraphGCN as PG_GraphGCN
 
 def string_to_model(paper, dataset):
     """

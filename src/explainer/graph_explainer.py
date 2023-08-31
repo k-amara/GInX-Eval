@@ -1,10 +1,8 @@
 import argparse
 import numpy as np
+from src.explainer.gflowexplainer2 import Runner, gflow2_parse_args
 from src.explainer.pgexplainer import PGExplainer
 from src.explainer.pgmexplainer import Graph_Explainer
-from src.train_gnn import TrainModel
-from src.dataset import GraphDataset
-from src.utils.mask_utils import keep_hard, remove_hard
 import torch
 import os
 import dill
@@ -14,10 +12,10 @@ from copy import deepcopy
 from captum.attr import IntegratedGradients, Saliency
 from torch_geometric.data import Data
 from torch_geometric.utils import to_networkx
-from gnn.model import GCNConv, GATConv, GINEConv, TransformerConv, get_gnnNets
+from gnn.model import GCNConv, GATConv, GINEConv, TransformerConv
 from gendata import get_dataloader
 from utils.io_utils import write_to_json
-from utils.gen_utils import extract_hard_explanation, get_cmn_edges, sample_large_graph
+from utils.gen_utils import get_cmn_edges, sample_large_graph
 from explainer.gnnexplainer import TargetedGNNExplainer
 from explainer.gradcam import GraphLayerGradCam
 from explainer.subgraphx import SubgraphX
@@ -518,6 +516,42 @@ def explain_gflowexplainer_graph(model, data, target, device, **kwargs):
 
     # foward_multisteps - origin of this function?
     _, edge_mask = gflowexplainer_agent.foward_multisteps(data, gflowexplainer.model)
+    # convert removal priority into importance score: rank 3 --> importance score 3/num_edges
+    edge_mask = edge_mask/len(edge_mask)
+    # edge_mask[i]: indicate the edge of the i-th removal
+    # edge_mask = [0,6,3,2,5,4,1] --> [0,1] should be removed first (rank 0), [6,0] should be removed second (rank 1)
+    # edge_index = [[0,0,2,3,4,5,6], [1,2,3,4,5,6,0]]
+    return edge_mask, None
+
+
+def explain_gflowexplainer2_graph(model, data, target, device, **kwargs):
+    dataset_name = kwargs["dataset_name"]
+    seed = kwargs["seed"]
+    # hidden_dim = kwargs["hidden_dim"]
+    subdir = os.path.join(kwargs["model_save_dir"], "gflowexplainer2")
+    os.makedirs(subdir, exist_ok=True)
+    gflowexplainer_saving_path = os.path.join(subdir, f"gflowexplainer2_{dataset_name}_{str(device)}_{seed}.pickle")
+    parser = function_with_args_and_default_kwargs(dict_args=kwargs, optional_args=None)
+    train_params = gflow2_parse_args(parser)
+    train_params.save_dir = subdir
+    train_params.dataset = dataset_name
+    train_params.data_save_dir = kwargs["data_save_dir"]
+    train_params.seed = seed
+
+    gflowexplainer = Runner(train_params)
+    t0 = time.time()
+    gflowexplainer.run()
+    train_time = time.time() - t0
+    print("Save GFlowExplainer model...")
+    # Save the file
+    print('gflowexplainer', gflowexplainer)
+    #torch.save(gflowexplainer_agent.state_dict(), gflowexplainer_saving_path)
+    train_time_file = os.path.join(subdir, f"gflowexplainer2_train_time.json")
+    entry = {"dataset": dataset_name, "train_time": train_time, "seed": seed, "device": str(device)}
+    write_to_json(entry, train_time_file)
+
+    # foward_multisteps - origin of this function?
+    edge_mask = gflowexplainer.evaluate_one(data)
     # convert removal priority into importance score: rank 3 --> importance score 3/num_edges
     edge_mask = edge_mask/len(edge_mask)
     # edge_mask[i]: indicate the edge of the i-th removal

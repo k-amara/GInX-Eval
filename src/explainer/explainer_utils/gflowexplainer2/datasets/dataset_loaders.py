@@ -3,10 +3,11 @@ import numpy as np
 import os
 from numpy.random.mtrand import RandomState
 
-from datasets.utils import preprocess_features, preprocess_adj, adj_to_edge_index, load_real_dataset
+from src.explainer.explainer_utils.gflowexplainer2.datasets.utils import preprocess_features, preprocess_adj, adj_to_edge_index
+from src.gendata import get_dataset
 
 
-def load_graph_dataset(_dataset, shuffle=True):
+def load_graph_dataset(_dataset, shuffle=True, **kwargs):
     """Load a graph dataset and optionally shuffle it.
 
     :param _dataset: Which dataset to load. Choose from "ba2" or "mutag"
@@ -14,25 +15,9 @@ def load_graph_dataset(_dataset, shuffle=True):
     :returns: np.array
     """
     # Load the chosen dataset from the pickle file.
-    if _dataset == "ba2":
-        dir_path = os.path.dirname(os.path.realpath(__file__))
-        path = dir_path + '/pkls/' + "BA-2motif" + '.pkl'
-        with open(path, 'rb') as fin:
-            adjs, features, labels = pkl.load(fin)
-
-    elif _dataset == "mutag":
-        dir_path = os.path.dirname(os.path.realpath(__file__))
-        path = dir_path + '/pkls/' + "Mutagenicity" + '.pkl'
-        if not os.path.exists(path): # pkl not yet created
-            print("Mutag dataset pickle is not yet created, doing this now. Can take some time")
-            adjs, features, labels = load_real_dataset(path, dir_path + '/Mutagenicity/Mutagenicity_')
-            print("Done with creating the mutag dataset")
-        else:
-            with open(path, 'r') as fin:
-                adjs, features, labels = pkl.load(fin)
-    else:
-        print("Unknown dataset")
-        raise NotImplemented
+    dataset = get_dataset(_dataset, **kwargs)
+    print(dataset.adjs, dataset.x, dataset.y)
+    adjs, features, labels = dataset.adjs, dataset.x, dataset.y
 
     n_graphs = adjs.shape[0]
     indices = np.arange(0, n_graphs)

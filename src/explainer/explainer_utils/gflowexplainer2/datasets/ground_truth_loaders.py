@@ -2,7 +2,7 @@ import os
 
 from numpy.random.mtrand import RandomState
 import random
-from datasets.utils import preprocess_adj, adj_to_edge_index, load_real_dataset, get_graph_data
+from src.explainer.explainer_utils.gflowexplainer2.datasets.utils import preprocess_adj, adj_to_edge_index, load_real_dataset, get_graph_data
 
 import pickle as pkl
 import numpy as np
