@@ -7,6 +7,7 @@ import time
 import pandas as pd
 import torch
 from torch import optim
+import os
 import networkx as nx
 from src.explainer.explainer_utils.gflowexplainer2.components import *
 from src.explainer.explainer_utils.gflowexplainer2.utils import *
@@ -20,6 +21,17 @@ import matplotlib
 matplotlib.use("AGG")
 torch.set_num_threads (4)
 
+class NpEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, torch.Tensor):
+            return obj.cpu().numpy().tolist()
+        return json.JSONEncoder.default(self, obj)
 
 
 # gflow explainer related parameters
@@ -81,23 +93,25 @@ class Runner:
         self.graphs_temp, self.nodefeats, ground_truth_labels, self.task = self.load_data()
         # Load pretrained models
         # self.trained_model, checkpoint = model_selector.model_selector(args.model, args.dataset, pretrained=True, return_checkpoint=True)
-        self.trained_model = model_selector.model_selector(args.model, args.dataset, pretrained=True, return_checkpoint=False)
+        self.trained_model = model_selector.model_selector(args.model, args.dataset, pretrained=False, return_checkpoint=False)
         # Load ground truth
         self.n_graphs = self.nodefeats.shape[0]
         self.test_indices = args.ratio
-        if self.test_indices!=0:
-            self.explanation_labels,self.explain_eval_seeds_induc, explain_eval_seeds, self.adj = ground_truth_loaders.load_dataset_ground_truth(args.dataset,test_indices = self.test_indices)
+        if self.task == "node_task":
+            if self.test_indices!=0:
+                self.explanation_labels,self.explain_eval_seeds_induc, explain_eval_seeds, self.adj = ground_truth_loaders.load_dataset_ground_truth(args.dataset,shuffle=True, test_indices = self.test_indices, **vars(args))
+            else:
+                self.explanation_labels, explain_eval_seeds,self.adj = ground_truth_loaders.load_dataset_ground_truth(args.dataset,shuffle=True, **vars(args))
+                self.explain_eval_seeds_induc = explain_eval_seeds
         else:
-            self.explanation_labels, explain_eval_seeds,self.adj = ground_truth_loaders.load_dataset_ground_truth(args.dataset)
-
-
+            self.explanation_labels, explain_eval_seeds = ground_truth_loaders.load_dataset_ground_truth(args.dataset, shuffle=True, **vars(args))
             self.explain_eval_seeds_induc = explain_eval_seeds
         # evaluation seeds 是(400,700,5)
         # node : return (graph, labels), range(400, 700, 5)
         # graph : return (edge_index, labels), allnodes
 
         # Load AUC Evaluation
-        self.auc_eval= AUCEvaluation(self.task, self.explanation_labels, explain_eval_seeds,self.adj)
+        self.auc_eval= AUCEvaluation(self.task, self.explanation_labels, explain_eval_seeds)
 
 
         max_size_in_sg = 0
@@ -247,25 +261,26 @@ class Runner:
     def load_data(self, shuffle=True):
         args = self.args
         # Load complete dataset
-        graphs, features, ground_truth_labels, _, _, test_mask = dataset_loaders.load_dataset(args.data_save_dir, shuffle=shuffle, **args)
+        graphs, features, ground_truth_labels, _, _, test_mask = dataset_loaders.load_dataset(args.data_save_dir, shuffle=shuffle, **vars(args))
         if isinstance(graphs, list):  # We're working with a model for graph classification
             task = "graph_task"
         else:
             task = "node_task"
         features = torch.tensor(features)  # (700,10)
         ground_truth_labels = torch.tensor(ground_truth_labels)  # (700,)
-
         return graphs, features, ground_truth_labels, task
+    
     def init_dir(self):
         args = self.args
-        savedir = pathlib.Path(args.savedir)
+        now = datetime.datetime.now()
+        savedir = pathlib.Path(os.path.join(args.model_save_dir, f'{args.dataset_name}/{now.strftime("%Y%m%d%H%M%S")}/'))
         savedir.mkdir(parents=True, exist_ok=True)
         # writer = SummaryWriter(savedir / 'tb')
         writer = DummyWriter()
         with open(savedir / 'settings.json', 'w') as fh:
             arg_dict = vars(args)
             arg_dict['model'] = 'RGExplainer_v1'
-            json.dump(arg_dict, fh, sort_keys=True, indent=4)
+            json.dump(arg_dict, fh, sort_keys=True, indent=4, cls=NpEncoder)
         pretrain_dir = pathlib.Path('pretrained')
         pretrain_dir.mkdir(exist_ok=True)
         return savedir, pretrain_dir, writer

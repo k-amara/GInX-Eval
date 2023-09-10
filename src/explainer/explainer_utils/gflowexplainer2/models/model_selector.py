@@ -26,6 +26,8 @@ def string_to_model(paper, dataset):
             return GNN_GraphGCN(10, 2)
         elif dataset == "mutag":
             return GNN_GraphGCN(14, 2)
+        elif dataset == "benzene":
+            return GNN_GraphGCN(14, 2)
         else:
             raise NotImplementedError
     elif paper == "PG":

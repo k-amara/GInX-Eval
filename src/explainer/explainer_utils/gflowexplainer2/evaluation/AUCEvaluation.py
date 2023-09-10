@@ -12,11 +12,11 @@ class AUCEvaluation(BaseEvaluation):
     
     :funcion get_score: obtain the roc auc score.
     """
-    def __init__(self, task, ground_truth, indices, adj):
+    def __init__(self, task, ground_truth, indices):
         self.task = task
         self.ground_truth = ground_truth
         self.indices = indices
-        self.adj = adj
+
     def get_score(self, explanations):
         """
         Determines the auc score based on the given list of explanations and the list of ground truths

@@ -1,11 +1,43 @@
 import os
 
 from numpy.random.mtrand import RandomState
+import torch
 import random
 from src.explainer.explainer_utils.gflowexplainer2.datasets.utils import preprocess_adj, adj_to_edge_index, load_real_dataset, get_graph_data
 
 import pickle as pkl
 import numpy as np
+from src.gendata import get_dataset
+
+
+def load_benzene_ground_truth(_dataset, shuffle=True, **kwargs):
+    # Load the chosen dataset from the pickle file.
+    dataset_root = kwargs['data_save_dir']
+    _dataset = kwargs['dataset_name']
+    dataset = get_dataset(dataset_root, **kwargs)
+    
+    n_graphs = dataset.data.y.shape[0]
+    indices = np.arange(0, n_graphs)
+    if shuffle:
+        prng = RandomState(42) # Make sure that the permutation is always the same, even if we set the seed different
+        shuffled_indices = prng.permutation(indices)
+    else:
+        shuffled_indices = indices
+
+    # Create shuffled data
+    dataset = dataset[shuffled_indices]
+
+    # Transform to edge index
+    shuffled_edge_index = [np.array(data.edge_index) for data in dataset]
+    b = np.zeros((len(dataset.data.y), kwargs["num_classes"]))
+    b[np.arange(len(dataset.data.y)), dataset.data.y] = 1
+    shuffled_labels = torch.tensor(b)
+    shuffled_edge_list = [np.array(data.edge_index) for data in dataset]
+    shuffled_edge_label_lists = [np.array(data.edge_mask) for data in dataset]
+
+    return shuffled_edge_index, shuffled_labels, shuffled_edge_list, shuffled_edge_label_lists
+
+
 
 
 def load_ba2_ground_truth(shuffle=True):
@@ -111,7 +143,7 @@ def _load_node_dataset_ground_truth(_dataset):
     return graph, labels, adj
 
 
-def load_dataset_ground_truth(_dataset, shuffle=True, test_indices=None):
+def load_dataset_ground_truth(_dataset, shuffle=True, test_indices=None, **kwargs):
     """Load a the ground truth from a dataset.
     Optionally we can only request the indices needed for testing.
     
@@ -189,7 +221,23 @@ def load_dataset_ground_truth(_dataset, shuffle=True, test_indices=None):
             filtered = [i for i in all if i in test_indices]
             return (np_edge_list, np_edge_labels), filtered
 
-    # elif
+    elif _dataset == "benzene":
+        edge_index, labels, edge_list, edge_labels = load_benzene_ground_truth(_dataset, shuffle, **kwargs)
+        selected = []
+        np_edge_list = []
+        for gid in range(0, len(edge_index)):
+            ed = edge_list[gid]
+            ed_np = np.array(ed)
+            np_edge_list.append(ed_np)
+            if np.argmax(labels[gid]) == 0 and np.sum(np.array(edge_labels[gid], dtype='int')) ==4:
+                selected.append(gid)
+        np_edge_labels = [np.array(ed_lab) for ed_lab in edge_labels]
+        if test_indices is None:
+            return (np_edge_list, np_edge_labels), selected
+        else:
+            all = range(400, 700, 1)
+            filtered = [i for i in all if i in test_indices]
+            return (np_edge_list, np_edge_labels), filtered
     else:
         print("Dataset does not exist")
         raise ValueError
