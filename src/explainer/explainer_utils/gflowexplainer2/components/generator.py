@@ -82,15 +82,11 @@ class ExpansionEnv:
         self.trajectories = [x.copy() for x in self.data]
         self.dones = [x[-1] == 'EOS' or len(x) >= self.max_size or len(self.graph.outer_boundary(x)) == 0
                       for x in self.trajectories]
-        assert not any(self.dones)
+        # assert not any(self.dones)
         seeds = [self.data[i][0] for i in range(self.bs)]
         nodes = [self.data[i] for i in range(self.bs)]
         x_seeds = self.make_single_node_encoding(seeds)
-
-
         x_nodes = self.make_nodes_encoding(nodes)
-
-
         return x_seeds, x_nodes
 
 

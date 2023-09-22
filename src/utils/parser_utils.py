@@ -2,7 +2,7 @@ import argparse
 import numpy as np
 import torch
 import random
-from utils.path import DATA_DIR, LOG_DIR, MODEL_DIR, RESULT_DIR, MASK_DIR
+from utils.path import DATA_DIR, LOG_DIR, MODEL_DIR, RESULT_DIR, MASK_DIR, PROP_DIR
 
 
 def fix_random_seed(seed):
@@ -101,6 +101,12 @@ def arg_parse():
         help="Directory where results are saved",
         type=str,
         default=RESULT_DIR,
+    )
+    parser.add_argument(
+        "--properties_save_dir",
+        help="Directory where mask properties are saved",
+        type=str,
+        default=PROP_DIR,
     )
     parser.add_argument(
         "--fig_save_dir",

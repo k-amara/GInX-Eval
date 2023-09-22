@@ -18,7 +18,7 @@ from utils.parser_utils import (
 )
 from pathlib import Path
 from torch_geometric.utils import degree
-
+from torch_geometric.data import Data
 
 def main(args, args_group):
     fix_random_seed(args.seed)
@@ -80,7 +80,7 @@ def main(args, args_group):
             dataset=dataset,
             device=device,
             graph_classification=eval(args.graph_classification),
-            save_dir=os.path.join(args.model_save_dir, args.dataset_name),
+            save_dir=os.path.join(args.model_save_dir, 'initial', args.dataset_name),
             save_name=model_save_name,
             dataloader_params=dataloader_params,
         )
@@ -90,7 +90,7 @@ def main(args, args_group):
             dataset=dataset,
             device=device,
             graph_classification=eval(args.graph_classification),
-            save_dir=os.path.join(args.model_save_dir, args.dataset_name),
+            save_dir=os.path.join(args.model_save_dir, 'initial', args.dataset_name),
             save_name=model_save_name,
         )
     if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
@@ -123,15 +123,14 @@ def main(args, args_group):
         new_dataset = []
         for i, data in enumerate(dataset):
             assert data.idx.detach().cpu().item() == list_explained_y[i]
-            new_data = data.clone()
             new_edge_index = data.edge_index[:, thresh_edge_masks[i]>0]
-            new_data.edge_attr = data.edge_attr[thresh_edge_masks[i]>0]
-            new_data.edge_weight = None
-            new_nodes = torch.unique(new_edge_index)
-            new_data.x = data.x[new_nodes]
-            node_idx = torch.zeros(data.x.size(0), dtype=torch.long, device=device)
-            node_idx[new_nodes] = torch.arange(new_data.x.size(0), device=device)
-            new_data.edge_index = node_idx[new_edge_index]
+            new_edge_attr = data.edge_attr[thresh_edge_masks[i]>0]
+            new_edge_weight = torch.ones(new_edge_attr.size(0), dtype=torch.float, device=device)
+            new_nodes = torch.sort(torch.unique(new_edge_index))[0]
+            new_x = data.x[new_nodes]
+            dict = {new_nodes[i].item(): i for i in range(len(new_nodes))}
+            new_new_edge_index = torch.tensor([[dict[new_edge_index[0, j].item()], dict[new_edge_index[1, j].item()]] for j in range(new_edge_index.size(1))], dtype=torch.long, device=device).t()
+            new_data = Data(x = new_x, edge_index = new_new_edge_index, edge_attr = new_edge_attr, edge_weight = new_edge_weight, y = data.y, idx = data.idx)
             new_dataset.append(new_data)
         new_dataset = GraphDataset(new_dataset)
 

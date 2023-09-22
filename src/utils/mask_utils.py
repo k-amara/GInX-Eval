@@ -1,5 +1,7 @@
 ### Utils to transform edge masks
 import numpy as np
+from scipy.stats import entropy
+import matplotlib.pyplot as plt
 
 def mask_to_shape(mask, edge_index, num_top_edges):
     """Modify the mask by selecting only the num_top_edges edges with the highest mask value."""
@@ -106,3 +108,62 @@ def remove_hard(mask, threshold=0.1):
     new_mask[important_indices] = 0
     return new_mask
 
+
+
+##### Mask properties #####
+
+def get_sparsity(masks):
+    sparsity = 0
+    for i in range(len(masks)):
+        sparsity += 1.0 - (masks[i] != 0).sum() / len(masks[i])
+    return sparsity / len(masks)
+
+
+def get_size(masks):
+    size = 0
+    for i in range(len(masks)):
+        size += (masks[i] != 0).sum()
+    return size / len(masks)
+
+
+def get_entropy(masks):
+    ent = 0
+    k = 0
+    for i in range(len(masks)):
+        pos_mask = masks[i][masks[i] > 0]
+        if len(pos_mask) == 0:
+            continue
+        ent += entropy(pos_mask)
+        k += 1
+    if k == 0:
+        return -1
+    return ent / k
+
+
+def get_avg_max(masks):
+    max_avg = 0
+    k = 0
+    for i in range(len(masks)):
+        pos_mask = masks[i][masks[i] > 0]
+        if len(pos_mask) == 0:
+            continue
+        # kde = gaussian_kde(np.array(pos_mask))
+        # density = kde(pos_mask)
+        # index = np.argmax(density)
+        ys, xs, _ = plt.hist(pos_mask, bins=100)
+        index = np.argmax(ys)
+        max_avg += xs[index]
+        k += 1
+    if k == 0:
+        return -1
+    return max_avg / k
+
+
+def get_mask_properties(masks):
+    mask_info = {
+        "mask_size": get_size(masks),
+        "mask_sparsity": get_sparsity(masks),
+        "mask_entropy": get_entropy(masks),
+        "max_avg": get_avg_max(masks),
+    }
+    return mask_info

@@ -141,3 +141,9 @@ clutils/
 figures/
 results/
 notebooks/
+src/main_active.py
+src/explainer/active_explainer.py
+src/explainer/gflowexplainer.py
+src/explainer/gflowexplainer2.py
+src/explainer/explainer_utils/gflowexplainer/
+src/explainer/explainer_utils/gflowexplainer2/

@@ -80,7 +80,7 @@ def main(args, args_group):
             dataset=dataset,
             device=device,
             graph_classification=eval(args.graph_classification),
-            save_dir=os.path.join(args.model_save_dir, args.dataset_name),
+            save_dir=os.path.join(args.model_save_dir, 'initial', args.dataset_name),
             save_name=model_save_name,
             dataloader_params=dataloader_params,
         )
@@ -90,7 +90,7 @@ def main(args, args_group):
             dataset=dataset,
             device=device,
             graph_classification=eval(args.graph_classification),
-            save_dir=os.path.join(args.model_save_dir, args.dataset_name),
+            save_dir=os.path.join(args.model_save_dir, 'initial', args.dataset_name),
             save_name=model_save_name,
         )
     if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
