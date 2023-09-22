@@ -6,6 +6,7 @@ import yaml
 import numpy as np
 import pandas as pd
 import copy
+import time
 from gnn.model import get_gnnNets
 from train_gnn import TrainModel
 from gendata import get_dataset
@@ -28,11 +29,6 @@ def main(args, args_group):
 
     dataset_params = args_group["dataset_params"]
     model_params = args_group["model_params"]
-
-    for param in list(args_group["active_params"].values()):
-        args.explainer_name += f'_{param}'
-        print(args.explainer_name)
-
 
     # For active explainability
     args.train_params = args_group["train_params"]
@@ -94,41 +90,31 @@ def main(args, args_group):
         }
     model = get_gnnNets(args.num_node_features, args.num_classes, model_params)
     model_save_name = f"{args.model_name}_{args.num_layers}l_{args.seed}"
-    if eval(args.graph_classification):
-        trainer = TrainModel(
-            model=model,
-            dataset=dataset,
-            device=device,
-            graph_classification=eval(args.graph_classification),
-            save_dir=os.path.join(args.model_save_dir, 'initial', args.dataset_name),
-            save_name=model_save_name,
-            dataloader_params=dataloader_params,
-        )
-    else:
-        trainer = TrainModel(
-            model=model,
-            dataset=dataset,
-            device=device,
-            graph_classification=eval(args.graph_classification),
-            save_dir=os.path.join(args.model_save_dir, 'initial', args.dataset_name),
-            save_name=model_save_name,
-        )
-    if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
-        trainer.load_model()
-    else:
-        trainer.train(
-            train_params=args_group["train_params"],
-            optimizer_params=args_group["optimizer_params"],
-        )
+    trainer = TrainModel(
+        model=model,
+        dataset=dataset,
+        device=device,
+        graph_classification=eval(args.graph_classification),
+        save_dir=None,
+        save_name=None,
+        dataloader_params=dataloader_params,
+    )
+    t0 = time.time()
+    trainer.train(
+        train_params=args_group["train_params"],
+        optimizer_params=args_group["optimizer_params"],
+    )
+    train_time = time.time() - t0
     scores, preds = trainer.test()
     scores['threshold'] = 0
     scores['seed'] = args.seed
+    scores['train_time'] = train_time
     df_scores = pd.DataFrame(scores, index=[0])
     save_path = os.path.join(
         args.result_save_dir, args.dataset_name, args.explainer_name
     )
     os.makedirs(save_path, exist_ok=True)
-    scores_save_path = os.path.join(save_path, f"{model_save_name}_scores.csv")
+    scores_save_path = os.path.join(save_path, f"{model_save_name}_train_time.csv")
     with open(scores_save_path, 'w') as f:
         df_scores.to_csv(f, header=f.tell()==0)
 
@@ -161,20 +147,20 @@ def main(args, args_group):
             dataset=new_dataset,
             device=device,
             graph_classification=eval(args.graph_classification),
-            save_dir=os.path.join(args.model_save_dir, 'activeX', args.dataset_name, args.explainer_name),
-            save_name=model_save_name + f"_{args.explainer_name}_sub_thresh_{t}",
+            save_dir=None,
+            save_name=None,
             dataloader_params=dataloader_params,
         )
-        if Path(os.path.join(trainer.save_dir, f"{trainer.save_name}_best.pth")).is_file():
-            trainer.load_model()
-        else:
-            trainer.train(
-                train_params=args_group["train_params"],
-                optimizer_params=args_group["optimizer_params"],
-            )
+        t0 = time.time()
+        trainer.train(
+            train_params=args_group["train_params"],
+            optimizer_params=args_group["optimizer_params"],
+        )
+        train_time = time.time() - t0
         scores, preds = trainer.test()
         scores['threshold'] = t
         scores['seed'] = args.seed
+        scores['train_time'] = train_time
         df_scores = pd.DataFrame(scores, index=[0])
         print(df_scores)
         with open(scores_save_path, 'a') as f:
