@@ -1,6 +1,6 @@
 # GInEx-Eval
 
-*GInEx-Eval is a evaluation procedure that estimate edge importance in graph neural networks.*
+*GInEx-Eval is an evaluation procedure that estimate edge importance in graph neural networks.*
 
 This directory contains the code needed to implement **GInX-Eval**, Graph In-distribution eXplanation Evaluation, a procedure to evaluate how informative edges are to the GNN model.
 
@@ -84,6 +84,17 @@ pip install tqdm matplotlib argparse json jupyterlab notebook pgmpy captum
 ## Getting Started: How to evaluate a GNN explainability method using GInX-Eval?
 
 ### Run code
+
+#### GInX-Eval of Hard Explanations
+
+A hard explanation or explanatory subgraph is a subgraph that keeps only the important edges, i.e. the positive values in the sparse explanatory edge mask. 
+The hard explanation has only the nodes connected to the remaining important edges and is usually smaller than the input graphs.
+
+```bash
+python src/main_sub.py --dataset_name [dataset-name] --model_name [gnn-model] --explainer_name [explainer-name]
+```
+
+#### GInX-Eval of Soft Explanations
 
 ```bash
 python src/main.py --dataset_name [dataset-name] --model_name [gnn-model] --explainer_name [explainer-name]
