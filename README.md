@@ -96,6 +96,10 @@ python src/main_sub.py --dataset_name [dataset-name] --model_name [gnn-model] --
 
 #### GInX-Eval of Soft Explanations
 
+A soft explanation or explanatory weighted graph is the input graph weighted by the explanatory sparse explanatory mask. 
+The structure of the input graph is kept in the soft explanation, the edge index and nodes are similar to the input graph but unimportant edges receive zero weights. 
+
+
 ```bash
 python src/main.py --dataset_name [dataset-name] --model_name [gnn-model] --explainer_name [explainer-name]
 ```
