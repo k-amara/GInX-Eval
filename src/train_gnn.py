@@ -34,7 +34,8 @@ class TrainModel(object):
         self.save = save_dir is not None
         self.save_dir = save_dir
         self.save_name = save_name
-        check_dir(self.save_dir)
+        if save_dir is not None:
+            check_dir(self.save_dir)
 
         if self.graph_classification:
             dataloader_params = kwargs.get("dataloader_params")

@@ -2,6 +2,9 @@
 import numpy as np
 from scipy.stats import entropy
 import matplotlib.pyplot as plt
+from torch_geometric.utils import degree
+from torch_geometric.utils.convert import to_networkx
+import networkx as nx
 
 def mask_to_shape(mask, edge_index, num_top_edges):
     """Modify the mask by selecting only the num_top_edges edges with the highest mask value."""
@@ -167,3 +170,25 @@ def get_mask_properties(masks):
         "max_avg": get_avg_max(masks),
     }
     return mask_info
+
+def get_degrees(dataset):
+    degree_list = [np.array(degree(data.edge_index[0])) for data in dataset]
+    return degree_list
+
+def get_cluster_coefficients(dataset):
+    list_cc_all = []
+    for data in dataset:
+        G = to_networkx(data)
+        cc_graph = nx.clustering(G)
+        list_cc = list(cc_graph.values())
+        list_cc_all.append(np.array(list_cc))
+    return list_cc_all
+
+def get_spectrum(dataset):
+    spectrum = []
+    for data in dataset:
+        G = to_networkx(data)
+        ei = nx.laplacian_spectrum(G)
+        spectrum.append(ei)
+    return spectrum
+

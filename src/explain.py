@@ -6,7 +6,7 @@ import pickle
 import yaml
 import numpy as np
 import pandas as pd
-from evaluate.fidelity import (
+from evaluation.fidelity import (
     fidelity_acc,
     fidelity_acc_inv,
     fidelity_gnn_acc,
@@ -19,7 +19,7 @@ from evaluate.fidelity import (
 from utils.io_utils import check_dir
 from utils.gen_utils import list_to_dict
 from dataset.syn_utils.gengroundtruth import get_ground_truth_syn
-from evaluate.accuracy import (
+from evaluation.accuracy import (
     get_explanation_syn,
     get_scores,
 )
