@@ -1,6 +1,6 @@
-# GInEx-Eval
+# GInX-Eval
 
-*GInEx-Eval is an evaluation procedure that estimate edge importance in graph neural networks.*
+*GInX-Eval is an evaluation procedure that estimate edge importance in graph neural networks.*
 
 This directory contains the code needed to implement **GInX-Eval**, Graph In-distribution eXplanation Evaluation, a procedure to evaluate how informative edges are to the GNN model.
 
